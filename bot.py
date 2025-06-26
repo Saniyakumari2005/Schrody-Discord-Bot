@@ -37,4 +37,4 @@ async def on_ready():
 async def hello(interation: discord.Interaction):
     await Interaction.response.send_message(f"Hello, {Interaction.user.mention}! How can I help?")
 
-bot.run(config.TOKEN)
+bot.run(str(config.TOKEN))
