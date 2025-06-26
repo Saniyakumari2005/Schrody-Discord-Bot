@@ -10,13 +10,14 @@ from sessions import TutoringSession
 class Tutor(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.sessions = {}
         self.check_inactive_sessions.start()
 
     @app_commands.command(name="start_session", description="Start a tutoring session.")
     async def start_session(self, interaction: discord.Interaction):
         """Starts a tutoring session and logs the start time."""
         user = interaction.user
-        existing_session = db.get_active_session(user.id)
+        existing_session = db.sessions_collection.find_one({"user_id": str(user.id), "active": True})
 
         if existing_session:
             await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrody!", ephemeral=True)

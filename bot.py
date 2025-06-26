@@ -17,8 +17,9 @@ intents.message_content = True
 
 #Initialize bot with a slash command
 class Schrody(commands.Bot):
-    super().__init__(command_prefix=None, intents=intents)
-    self.tree = app_commands.CommandTree(self)
+    def __init__(self):
+        super().__init__(command_prefix=None, intents=intents)
+        self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
         """Sync commands when bot starts."""
@@ -34,7 +35,9 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user}")
 
 @bot.tree.command(name="Hello", description="Sends a greeting")
-async def hello(interation: discord.Interaction):
-    await Interaction.response.send_message(f"Hello, {Interaction.user.mention}! How can I help?")
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Hello, {interaction.user.mention}! How can I help?")
 
-bot.run(str(config.TOKEN))
+if not config.TOKEN:
+    raise ValueError("DISCORD_TOKEN environment variable is not set")
+bot.run(config.TOKEN)
