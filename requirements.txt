@@ -3,3 +3,4 @@ discord.py
 pymongo
 python-dotenv
 requests
+discord.py
