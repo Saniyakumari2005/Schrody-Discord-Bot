@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord import Bot, app_commands
+from discord import app_commands
 import logging
 import db
 import config
