@@ -20,4 +20,4 @@ def ask_learnlm(prompt):
     if response.status_code == 200:
         return response.json().get("output", "Sorry, I couldn't process your request.")
     else:
-        return "❌ Error: Failed to fetch response from LearnLM."
+        return "❌ Error: Failed to fetch response from LearnLM."."

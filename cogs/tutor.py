@@ -35,8 +35,14 @@ class Tutor(commands.Cog):
     async def ask(self, interaction: discord.Interaction, question: str):
         user_id = str(interaction.user.id)
         
+        # Check if user has an active session
+        existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
+        if not existing_session:
+            await interaction.response.send_message("❌ You don't have an active session. Start one with `/start_session` first!")
+            return
+        
         # Retrieve conversation history
-        history = db.get_conversation(user_id)
+        history = db.get_conversation(user_id)user_id)
 
         # Send to LLM with context
         full_prompt = [{"role": msg["role"], "message": msg["message"]} for msg in history]
@@ -64,7 +70,7 @@ class Tutor(commands.Cog):
     async def check_inactive_sessions(self):
         """Auto-close inactive sessions after 10 minutes."""
         now = datetime.datetime.utcnow()
-        timeout = datetime.timedelta(minutes=10)
+        timeout = datetime.timedelta(minutes=30)</old_str>minutes=10)
 
         for session in db.sessions_collection.find({"active": True}):
             if now - session["start_time"] > timeout:
@@ -73,4 +79,4 @@ class Tutor(commands.Cog):
                 await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
 
 async def setup(bot):
-    await bot.add_cog(Tutor(bot))
+    await bot.add_cog(Tutor(bot))g(Tutor(bot))

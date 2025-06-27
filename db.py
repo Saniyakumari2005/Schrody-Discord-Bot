@@ -43,7 +43,7 @@ def start_session(user_id, username):
         "active": True,
         "feedback_given": False
     }
-    sessions_collection.insert_one(session)
+    sessions_collection.insert_one(session)sion)
 
 def end_session(user_id):
     """End a tutoring session."""
@@ -77,4 +77,4 @@ def get_conversation(user_id, limit=10):
 
 def clear_conversation(user_id):
     """Clear the conversation memory."""
-    conversations.delete_many({"user_id": user_id})
+    conversations.delete_many({"user_id": user_id})_id})

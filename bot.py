@@ -19,7 +19,6 @@ intents.message_content = True
 class Schrody(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=None, intents=intents)
-        self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
         """Sync commands when bot starts."""

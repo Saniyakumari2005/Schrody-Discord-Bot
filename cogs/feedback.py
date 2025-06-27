@@ -28,7 +28,7 @@ class Feedback(commands.Cog):
             return
         
         user_list = "\n".join([user["username"] for user in pending_users])
-        await interaction.response.send_message(f"🚨 Users who haven't submitted feedback:\n```{user_list}```")
+        await interaction.response.send_message(f"🚨 Users who haven't submitted feedback:\n```{user_list}```")ist}```")
 
     @tasks.loop(hours=12)
     async def remind_feedback(self):
@@ -38,4 +38,4 @@ class Feedback(commands.Cog):
             await user.send("🔔 Reminder: Schrody is waiting for your feedback! Please use `/feedback <1-5>`.")
 
 async def setup(bot):
-    await bot.add_cog(Feedback(bot))
+    await bot.add_cog(Feedback(bot))edback(bot))
