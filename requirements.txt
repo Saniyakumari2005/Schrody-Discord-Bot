@@ -3,3 +3,5 @@ pymongo
 python-dotenv
 requests
 discord.py
+google-generativeai
+google-generativeai

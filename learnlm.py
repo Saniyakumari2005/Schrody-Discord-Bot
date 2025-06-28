@@ -1,23 +1,39 @@
+
 import os
-import requests
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 # Load API keys
 load_dotenv()
-LLM_API_KEY = os.getenv("LLM_API_KEY")
-LLM_ENDPOINT = os.getenv("LLM_ENDPOINT")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not LLM_API_KEY or not LLM_ENDPOINT:
-    raise Exception("Missing LLM API key or endpoint. Please check your .env file.")
+if not GEMINI_API_KEY:
+    raise Exception("Missing GEMINI_API_KEY. Please add it to your .env file.")
+
+# Configure Gemini
+genai.configure(api_key=GEMINI_API_KEY)
 
 def ask_learnlm(prompt):
-    """Send a user query to Google LearnLM and return the response."""
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"}
-    payload = {"input": prompt}
+    """Send a user query to Gemini API and return the response."""
+    try:
+        # Initialize the model
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # Create a tutoring context for better responses
+        tutoring_prompt = f"""You are Schrody, a helpful AI tutoring assistant. Your role is to:
+- Provide clear, educational explanations
+- Break down complex topics into understandable parts
+- Ask follow-up questions to ensure understanding
+- Encourage learning and critical thinking
 
-    response = requests.post(LLM_ENDPOINT, json=payload, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json().get("output", "Sorry, I couldn't process your request.")
-    else:
-        return "❌ Error: Failed to fetch response from LearnLM."
+Student question: {prompt}
+
+Please provide a helpful, educational response:"""
+        
+        # Generate response
+        response = model.generate_content(tutoring_prompt)
+        return response.text
+        
+    except Exception as e:
+        print(f"Error with Gemini API: {e}")
+        return "❌ Sorry, I encountered an error while processing your request. Please try again."
