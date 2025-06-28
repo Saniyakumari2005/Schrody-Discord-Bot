@@ -12,6 +12,11 @@ class Database(commands.Cog):
     @app_commands.command(name="db_status", description="Check database connection and show statistics")
     async def db_status(self, interaction: discord.Interaction):
         """Check if database is working and show basic stats."""
+        # Check if user has administrator permissions
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ This command is restricted to administrators only.", ephemeral=True)
+            return
+            
         try:
             # Test database connection
             db.mongo_client.admin.command('ping')
@@ -60,6 +65,11 @@ class Database(commands.Cog):
     @app_commands.command(name="db_test", description="Test database operations")
     async def db_test(self, interaction: discord.Interaction):
         """Test basic database operations."""
+        # Check if user has administrator permissions
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ This command is restricted to administrators only.", ephemeral=True)
+            return
+            
         try:
             user_id = str(interaction.user.id)
             
