@@ -5,8 +5,18 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-mongo_client = MongoClient(os.getenv("MONGO_URL"))
-db = mongo_client[os.getenv("MONGO_DB")]
+
+# Get environment variables with error handling
+mongo_url = os.getenv("MONGO_URL")
+if mongo_url is None:
+    raise ValueError("MONGO_URL environment variable not set.")
+
+mongo_db_name = os.getenv("MONGO_DB")
+if mongo_db_name is None:
+    raise ValueError("MONGO_DB environment variable not set.")
+
+mongo_client = MongoClient(mongo_url)
+db = mongo_client[mongo_db_name]
 conversations = db.conversations
 
 # Collections
