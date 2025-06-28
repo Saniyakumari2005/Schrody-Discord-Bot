@@ -60,7 +60,14 @@ class Tutor(commands.Cog):
         # Save AI response
         db.add_message(user_id, response, role="ai")
         
-        await interaction.followup.send(response)
+        # Truncate response if it exceeds Discord's 2000 character limit
+        MAX_LENGTH = 2000
+        if len(response) > MAX_LENGTH:
+            truncated_response = response[:MAX_LENGTH-50] + "\n\n...(response truncated)"
+        else:
+            truncated_response = response
+        
+        await interaction.followup.send(truncated_response)
 
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
