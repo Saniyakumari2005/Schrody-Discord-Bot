@@ -24,4 +24,4 @@ class TutoringSession:
         """Ends the tutoring session."""
         self.active = False
         db.end_session(self.user.id)
-        await self.thread.send(f"✅ {self.user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")`.")
+        await self.thread.send(f"✅ {self.user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")

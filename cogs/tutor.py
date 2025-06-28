@@ -70,7 +70,7 @@ class Tutor(commands.Cog):
     async def check_inactive_sessions(self):
         """Auto-close inactive sessions after 10 minutes."""
         now = datetime.datetime.utcnow()
-        timeout = datetime.timedelta(minutes=30)</old_str>minutes=10)
+        timeout = datetime.timedelta(minutes=10)
 
         for session in db.sessions_collection.find({"active": True}):
             if now - session["start_time"] > timeout:
@@ -79,4 +79,4 @@ class Tutor(commands.Cog):
                 await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
 
 async def setup(bot):
-    await bot.add_cog(Tutor(bot))(Tutor(bot))
+    await bot.add_cog(Tutor(bot))

@@ -23,12 +23,12 @@ class Feedback(commands.Cog):
     async def pending_feedback(self, interaction: discord.Interaction):
         """Lists users who haven't submitted feedback."""
         pending_users = db.get_pending_feedback()
-        if pending_users.count() == 0:
+        if len(list(pending_users)) == 0:
             await interaction.response.send_message("✅ Everyone has submitted feedback!")
             return
         
         user_list = "\n".join([user["username"] for user in pending_users])
-        await interaction.response.send_message(f"🚨 Users who haven't submitted feedback:\n```{user_list}```")ist}```")
+        await interaction.response.send_message(f"🚨 Users who haven't submitted feedback:\n```{user_list}```")
 
     @tasks.loop(hours=12)
     async def remind_feedback(self):
@@ -38,4 +38,4 @@ class Feedback(commands.Cog):
             await user.send("🔔 Reminder: Schrody is waiting for your feedback! Please use `/feedback <1-5>`.")
 
 async def setup(bot):
-    await bot.add_cog(Feedback(bot))edback(bot))
+    await bot.add_cog(Feedback(bot))
