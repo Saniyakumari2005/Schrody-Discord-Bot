@@ -18,7 +18,7 @@ intents.message_content = True
 #Initialize bot with a slash command
 class Schrody(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=None, intents=intents)
+        super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
         """Sync commands when bot starts."""
