@@ -1,4 +1,3 @@
-
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -18,7 +17,7 @@ def ask_learnlm(prompt):
     try:
         # Initialize the model
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
+
         # Create a tutoring context for better responses
         tutoring_prompt = f"""You are Schrody, a helpful AI tutoring assistant. Your role is to:
 - Provide clear, educational explanations
@@ -29,11 +28,15 @@ def ask_learnlm(prompt):
 Student question: {prompt}
 
 Please provide a helpful, educational response:"""
-        
-        # Generate response
+
+        # Generate response with timeout handling
         response = model.generate_content(tutoring_prompt)
-        return response.text
-        
+
+        if response and response.text:
+            return response.text
+        else:
+            return "❌ I received an empty response. Please try rephrasing your question."
+
     except Exception as e:
         print(f"Error with Gemini API: {e}")
-        return "❌ Sorry, I encountered an error while processing your request. Please try again."
+        return f"❌ Sorry, I encountered an error while processing your request: {str(e)[:100]}... Please try again."

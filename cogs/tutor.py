@@ -33,12 +33,15 @@ class Tutor(commands.Cog):
 
     @app_commands.command(name="ask", description="Ask Schrody a question.")
     async def ask(self, interaction: discord.Interaction, question: str):
+        # Defer the response immediately to prevent timeout
+        await interaction.response.defer()
+        
         user_id = str(interaction.user.id)
         
         # Check if user has an active session
         existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
         if not existing_session:
-            await interaction.response.send_message("❌ You don't have an active session. Start one with `/start_session` first!")
+            await interaction.followup.send("❌ You don't have an active session. Start one with `/start_session` first!")
             return
         
         # Retrieve conversation history
@@ -57,7 +60,7 @@ class Tutor(commands.Cog):
         # Save AI response
         db.add_message(user_id, response, role="ai")
         
-        await interaction.response.send_message(response)
+        await interaction.followup.send(response)
 
 
     @app_commands.command(name="end_session", description="End the tutoring session.")

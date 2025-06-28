@@ -25,6 +25,7 @@ class Schrody(commands.Bot):
         await self.load_extension("cogs.tutor")
         await self.load_extension("cogs.feedback")
         await self.load_extension("cogs.database")
+        await self.load_extension("cogs.general")
         await self.tree.sync()
         print(f"✅ Synced {len(self.tree.get_commands())} slash commands.")
 
