@@ -24,6 +24,7 @@ class Schrody(commands.Bot):
         """Sync commands when bot starts."""
         await self.load_extension("cogs.tutor")
         await self.load_extension("cogs.feedback")
+        await self.load_extension("cogs.database")
         await self.tree.sync()
         print(f"✅ Synced {len(self.tree.get_commands())} slash commands.")
 
