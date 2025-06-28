@@ -23,13 +23,11 @@ class Tutor(commands.Cog):
             await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrody!", ephemeral=True)
             return
         
-        thread = await interaction.channel.create_thread(name=f"Schrody-{user.name}", type=discord.ChannelType.public_thread)
-        session = TutoringSession(user, thread)
-        self.sessions[thread] = session
+        session = TutoringSession(user, interaction.channel)
+        self.sessions[user.id] = session
         
         db.start_session(interaction.user.id, interaction.user.name)
-        await thread.send(f"📚 {user.mention}, Schrody is here to assist you! Ask me anything.")
-        await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you.")
+        await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you. Ask me anything with `/ask`.")
 
     @app_commands.command(name="ask", description="Ask Schrody a question.")
     async def ask(self, interaction: discord.Interaction, question: str):
