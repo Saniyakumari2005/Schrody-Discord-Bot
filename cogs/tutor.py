@@ -42,7 +42,7 @@ class Tutor(commands.Cog):
             return
         
         # Retrieve conversation history
-        history = db.get_conversation(user_id)user_id)
+        history = db.get_conversation(user_id)
 
         # Send to LLM with context
         full_prompt = [{"role": msg["role"], "message": msg["message"]} for msg in history]
@@ -79,4 +79,4 @@ class Tutor(commands.Cog):
                 await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
 
 async def setup(bot):
-    await bot.add_cog(Tutor(bot))g(Tutor(bot))
+    await bot.add_cog(Tutor(bot))(Tutor(bot))

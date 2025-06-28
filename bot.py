@@ -33,7 +33,7 @@ bot = Schrody()
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
 
-@bot.tree.command(name="Hello", description="Sends a greeting")
+@bot.tree.command(name="hello", description="Sends a greeting")
 async def hello(interaction: discord.Interaction):
     await interaction.response.send_message(f"Hello, {interaction.user.mention}! How can I help?")
 
