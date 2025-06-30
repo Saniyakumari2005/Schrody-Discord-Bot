@@ -23,7 +23,9 @@ class Tutor(commands.Cog):
             await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrody!", ephemeral=True)
             return
         
-        thread = await interaction.channel.create_thread(name=f"Schrody-{user.name}", type=discord.ChannelType.public_thread)
+        # Use server name instead of username for thread name
+        server_name = interaction.guild.name if interaction.guild else "DM"
+        thread = await interaction.channel.create_thread(name=f"Schrody-{server_name}", type=discord.ChannelType.public_thread)
         session = TutoringSession(user, thread)
         self.sessions[user.id] = session
         
@@ -83,7 +85,7 @@ class Tutor(commands.Cog):
         
         # Send response to the thread
         await session.thread.send(truncated_response)
-        await interaction.followup.send("✅ I've responded in your tutoring thread!")
+        await interaction.followup.send("✅ Response sent!")
 
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
@@ -96,6 +98,58 @@ class Tutor(commands.Cog):
         
         db.end_session(interaction.user.id)
         await interaction.response.send_message(f"📌 Your session has ended, {interaction.user.mention}. Please rate your experience with `/feedback <1-5>`.")
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Listen for messages in tutoring threads and respond automatically."""
+        # Ignore bot messages
+        if message.author.bot:
+            return
+        
+        # Check if message is in a tutoring thread
+        session = self.sessions.get(message.author.id)
+        if session and message.channel == session.thread:
+            user_id = str(message.author.id)
+            
+            # Check if user has an active session
+            existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
+            if not existing_session:
+                await message.channel.send("❌ Your session has expired. Start a new one with `/start_session`!")
+                return
+            
+            # Get conversation history
+            history = db.get_conversation(user_id)
+
+            # Build conversation context
+            conversation_context = ""
+            for msg in history:
+                role = "User" if msg["role"] == "user" else "Schrody"
+                conversation_context += f"{role}: {msg['message']}\n"
+
+            # Create contextualized prompt
+            if conversation_context:
+                contextualized_question = f"Previous conversation:\n{conversation_context}\nUser: {message.content}"
+            else:
+                contextualized_question = message.content
+
+            # Save the user's question
+            db.add_message(user_id, message.content, role="user")
+
+            # Get response from LearnLM with context
+            response = ask_learnlm(contextualized_question)
+
+            # Save AI response
+            db.add_message(user_id, response, role="ai")
+            
+            # Truncate response if it exceeds Discord's 2000 character limit
+            MAX_LENGTH = 2000
+            if len(response) > MAX_LENGTH:
+                truncated_response = response[:MAX_LENGTH-50] + "\n\n...(response truncated)"
+            else:
+                truncated_response = response
+            
+            # Send response to the thread
+            await message.channel.send(truncated_response)
 
     @tasks.loop(minutes=10)
     async def check_inactive_sessions(self):
