@@ -79,16 +79,35 @@ class Tutor(commands.Cog):
         # Save AI response
         db.add_message(user_id, response, role="ai")
 
-        # Truncate response if it exceeds Discord's 2000 character limit
-        MAX_LENGTH = 2000
-        if len(response) > MAX_LENGTH:
-            truncated_response = response[:MAX_LENGTH-50] + "\n\n...(response truncated)"
-        else:
-            truncated_response = response
-
-        # Delete the thinking message and send the actual response
+        # Delete the thinking message
         await thinking_message.delete()
-        await session.thread.send(truncated_response)
+        
+        # Split long messages into chunks to avoid Discord's 2000 character limit
+        MAX_LENGTH = 2000
+        if len(response) <= MAX_LENGTH:
+            await session.thread.send(response)
+        else:
+            # Split the message into chunks
+            chunks = []
+            current_chunk = ""
+            
+            for line in response.split('\n'):
+                if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
+                    current_chunk += line + '\n'
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk.rstrip())
+                    current_chunk = line + '\n'
+            
+            if current_chunk:
+                chunks.append(current_chunk.rstrip())
+            
+            # Send each chunk
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await session.thread.send(chunk)
+                else:
+                    await session.thread.send(f"**(continued...)**\n{chunk}")
 
     @app_commands.command(name="resume_session", description="Resume your tutoring session.")
     async def resume_session(self, interaction: discord.Interaction):
@@ -190,16 +209,35 @@ class Tutor(commands.Cog):
             # Save AI response
             db.add_message(user_id, response, role="ai")
 
-            # Truncate response if it exceeds Discord's 2000 character limit
-            MAX_LENGTH = 2000
-            if len(response) > MAX_LENGTH:
-                truncated_response = response[:MAX_LENGTH-50] + "\n\n...(response truncated)"
-            else:
-                truncated_response = response
-
-            # Delete the thinking message and send the actual response
+            # Delete the thinking message
             await thinking_message.delete()
-            await message.channel.send(truncated_response)
+            
+            # Split long messages into chunks to avoid Discord's 2000 character limit
+            MAX_LENGTH = 2000
+            if len(response) <= MAX_LENGTH:
+                await message.channel.send(response)
+            else:
+                # Split the message into chunks
+                chunks = []
+                current_chunk = ""
+                
+                for line in response.split('\n'):
+                    if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
+                        current_chunk += line + '\n'
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk.rstrip())
+                        current_chunk = line + '\n'
+                
+                if current_chunk:
+                    chunks.append(current_chunk.rstrip())
+                
+                # Send each chunk
+                for i, chunk in enumerate(chunks):
+                    if i == 0:
+                        await message.channel.send(chunk)
+                    else:
+                        await message.channel.send(f"**(continued...)**\n{chunk}")
 
     @tasks.loop(minutes=10)
     async def check_inactive_sessions(self):

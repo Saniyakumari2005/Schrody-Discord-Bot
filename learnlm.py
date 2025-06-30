@@ -45,9 +45,6 @@ Remember and reference previous parts of the conversation when relevant."""
         full_prompt = f"{system_prompt}\n\nStudent: {prompt}\n\nTutor:"
 
         # Generate response with timeout handling
-        response = model.generate_content(full_prompt)</old_str>
-
-        # Generate response with timeout handling
         response = model.generate_content(full_prompt)
 
         if response and response.text:
@@ -57,4 +54,5 @@ Remember and reference previous parts of the conversation when relevant."""
 
     except Exception as e:
         print(f"Error with Gemini API: {e}")
-        return f"❌ Sorry, I encountered an error while processing your request: {str(e)[:100]}... Please try again."
+        return f"❌ Sorry, I encountered an error while processing your request: {str(e)} Please try again."
+`
