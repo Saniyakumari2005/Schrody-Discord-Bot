@@ -55,4 +55,3 @@ Remember and reference previous parts of the conversation when relevant."""
     except Exception as e:
         print(f"Error with Gemini API: {e}")
         return f"❌ Sorry, I encountered an error while processing your request: {str(e)} Please try again."
-`
