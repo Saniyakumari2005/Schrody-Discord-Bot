@@ -86,6 +86,50 @@ class Tutor(commands.Cog):
         # Send response to the thread
         await session.thread.send(truncated_response)
 
+    @app_commands.command(name="resume_session", description="Resume your tutoring session.")
+    async def resume_session(self, interaction: discord.Interaction):
+        """Resume an existing tutoring session."""
+        user = interaction.user
+        user_id = str(user.id)
+
+        # Check if user has an active session in database
+        existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
+        if not existing_session:
+            await interaction.response.send_message(f"❌ {user.mention}, you don't have an active session to resume. Use `/start_session` to begin a new one!", ephemeral=True)
+            return
+
+        # Check if session is already in memory
+        if user.id in self.sessions:
+            session = self.sessions[user.id]
+            await interaction.response.send_message(f"✅ {user.mention}, your session is already active! Continue chatting in {session.thread.mention}.", ephemeral=True)
+            return
+
+        # Try to find the existing thread
+        thread_found = False
+        server_name = interaction.guild.name if interaction.guild else "DM"
+        thread_name = f"Schrody-{server_name}"
+
+        # Search for the thread in the current channel
+        async for thread in interaction.channel.guild.active_threads():
+            if thread.name == thread_name and any(member.id == user.id for member in thread.members):
+                # Recreate session object
+                session = TutoringSession(user, thread)
+                self.sessions[user.id] = session
+
+                # Update last activity time
+                db.sessions_collection.update_one(
+                    {"user_id": user_id, "active": True}, 
+                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                )
+
+                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in {thread.mention}!", ephemeral=True)
+                thread_found = True
+                break
+
+        if not thread_found:
+            await interaction.response.send_message(f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", ephemeral=True)
+
     @app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
         """Ends a tutoring session and asks for feedback."""
@@ -112,7 +156,7 @@ class Tutor(commands.Cog):
             # Check if user has an active session
             existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
             if not existing_session:
-                await message.channel.send("❌ Your session has expired. Start a new one with `/start_session`!")
+                await message.channel.send(f"❌ Your session has expired. You can resume it with `/resume_session` or start a new one with `/start_session`!")
                 return
 
             # Get conversation history

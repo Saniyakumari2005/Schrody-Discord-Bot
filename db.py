@@ -50,8 +50,11 @@ def start_session(user_id, username):
         "user_id": str(user_id),
         "username": username,
         "start_time": datetime.datetime.utcnow(),
+        "last_activity": datetime.datetime.utcnow(),
         "active": True,
-        "feedback_given": False
+        "feedback_given": False,
+        "warning_5min_sent": False,
+        "warning_15min_sent": False
     }
     sessions_collection.insert_one(session)
 
