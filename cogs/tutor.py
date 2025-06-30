@@ -85,7 +85,6 @@ class Tutor(commands.Cog):
         
         # Send response to the thread
         await session.thread.send(truncated_response)
-        await interaction.followup.send("✅ Response sent!")
 
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
