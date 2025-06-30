@@ -7,7 +7,7 @@ import datetime
 class Feedback(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.remind_feedback.start()
+        # self.remind_feedback.start()  # Disabled to prevent multiple DM reminders
 
     @app_commands.command(name="feedback", description="Submit feedback (1-5).")
     async def feedback(self, interaction: discord.Interaction, rating: int):
@@ -34,8 +34,19 @@ class Feedback(commands.Cog):
     async def remind_feedback(self):
         """Reminds users to submit feedback every 12 hours."""
         for session in db.get_pending_feedback():
-            user = await self.bot.fetch_user(int(session["user_id"]))
-            await user.send("🔔 Reminder: Schrody is waiting for your feedback! Please use `/feedback <1-5>`.")
+            # Check if we've already sent a reminder for this session
+            if not session.get("reminder_sent", False):
+                try:
+                    user = await self.bot.fetch_user(int(session["user_id"]))
+                    await user.send("🔔 Reminder: Schrody is waiting for your feedback! Please use `/feedback <1-5>`.")
+                    
+                    # Mark that we've sent a reminder for this session
+                    db.sessions_collection.update_one(
+                        {"_id": session["_id"]}, 
+                        {"$set": {"reminder_sent": True}}
+                    )
+                except Exception as e:
+                    print(f"Failed to send feedback reminder to user {session['user_id']}: {e}")
 
 async def setup(bot):
     await bot.add_cog(Feedback(bot))
