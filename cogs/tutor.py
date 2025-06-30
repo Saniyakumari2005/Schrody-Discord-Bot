@@ -53,15 +53,23 @@ class Tutor(commands.Cog):
         # Retrieve conversation history
         history = db.get_conversation(user_id)
 
-        # Send to LLM with context
-        full_prompt = [{"role": msg["role"], "message": msg["message"]} for msg in history]
-        full_prompt.append({"role": "user", "message": question})
+        # Build conversation context
+        conversation_context = ""
+        for msg in history:
+            role = "User" if msg["role"] == "user" else "Schrody"
+            conversation_context += f"{role}: {msg['message']}\n"
+
+        # Create contextualized prompt
+        if conversation_context:
+            contextualized_question = f"Previous conversation:\n{conversation_context}\nUser: {question}"
+        else:
+            contextualized_question = question
 
         # Save the user's question
         db.add_message(user_id, question, role="user")
 
-        # Get response from LearnLM
-        response = ask_learnlm(question)
+        # Get response from LearnLM with context
+        response = ask_learnlm(contextualized_question)
 
         # Save AI response
         db.add_message(user_id, response, role="ai")

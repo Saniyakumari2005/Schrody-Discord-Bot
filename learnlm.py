@@ -24,10 +24,11 @@ def ask_learnlm(prompt):
 - Break down complex topics into understandable parts
 - Ask follow-up questions to ensure understanding
 - Encourage learning and critical thinking
+- Remember and reference previous parts of the conversation when relevant
 
-Student question: {prompt}
+{prompt}
 
-Please provide a helpful, educational response:"""
+Please provide a helpful, educational response that considers the conversation history if provided:"""
 
         # Generate response with timeout handling
         response = model.generate_content(tutoring_prompt)
