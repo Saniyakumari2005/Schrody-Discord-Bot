@@ -42,7 +42,10 @@ def ask_learnlm(prompt):
 Remember and reference previous parts of the conversation when relevant."""
 
         # Create the full prompt with system instructions and user input
-        full_prompt = f"{system_prompt}\n\nStudent: {prompt}\n\nTutor:"</old_str>
+        full_prompt = f"{system_prompt}\n\nStudent: {prompt}\n\nTutor:"
+
+        # Generate response with timeout handling
+        response = model.generate_content(full_prompt)</old_str>
 
         # Generate response with timeout handling
         response = model.generate_content(full_prompt)

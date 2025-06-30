@@ -52,6 +52,9 @@ class Tutor(commands.Cog):
             await interaction.followup.send("❌ Session not found. Please start a new session with `/start_session`.")
             return
 
+        # Show thinking indicator
+        thinking_message = await session.thread.send("🤔 Schrödy is thinking...")
+
         # Retrieve conversation history
         history = db.get_conversation(user_id)
 
@@ -83,7 +86,8 @@ class Tutor(commands.Cog):
         else:
             truncated_response = response
 
-        # Send response to the thread
+        # Delete the thinking message and send the actual response
+        await thinking_message.delete()
         await session.thread.send(truncated_response)
 
     @app_commands.command(name="resume_session", description="Resume your tutoring session.")
@@ -159,6 +163,9 @@ class Tutor(commands.Cog):
                 await message.channel.send(f"❌ Your session has expired. You can resume it with `/resume_session` or start a new one with `/start_session`!")
                 return
 
+            # Show thinking indicator
+            thinking_message = await message.channel.send("🤔 Schrödy is thinking...")
+
             # Get conversation history
             history = db.get_conversation(user_id)
 
@@ -190,7 +197,8 @@ class Tutor(commands.Cog):
             else:
                 truncated_response = response
 
-            # Send response to the thread
+            # Delete the thinking message and send the actual response
+            await thinking_message.delete()
             await message.channel.send(truncated_response)
 
     @tasks.loop(minutes=10)
