@@ -45,18 +45,19 @@ def get_messages(user_id, limit=10):
     return list(messages_collection.find({"user_id": str(user_id)}).sort("_id", -1).limit(limit))
 
 def start_session(user_id, username):
-    """Start a tutoring session."""
-    session = {
+    """Starts a new tutoring session for a user."""
+    now = datetime.datetime.utcnow()
+    session_data = {
         "user_id": str(user_id),
         "username": username,
-        "start_time": datetime.datetime.utcnow(),
-        "last_activity": datetime.datetime.utcnow(),
+        "start_time": now,
+        "last_activity": now,
         "active": True,
-        "feedback_given": False,
-        "warning_5min_sent": False,
-        "warning_15min_sent": False
+        "thread_reminder_sent": False,
+        "dm_warning_sent": False
     }
-    sessions_collection.insert_one(session)
+    sessions_collection.insert_one(session_data)
+    print(f"✅ Started session for {username} (ID: {user_id})")
 
 def end_session(user_id):
     """End a tutoring session."""
