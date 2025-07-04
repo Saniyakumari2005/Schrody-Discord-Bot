@@ -52,7 +52,13 @@ class Tutor(commands.Cog):
 
         # Use server name instead of username for thread name
         server_name = interaction.guild.name if interaction.guild else "DM"
-        thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
+        
+        # Check if we're in a thread, if so, get the parent channel
+        if isinstance(interaction.channel, discord.Thread):
+            parent_channel = interaction.channel.parent
+            thread = await parent_channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
+        else:
+            thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
         session = TutoringSession(user, thread)
         self.sessions[user.id] = session
 
@@ -181,8 +187,27 @@ class Tutor(commands.Cog):
         server_name = interaction.guild.name if interaction.guild else "DM"
         thread_name = f"Schrödy-{server_name}"
 
-        # Search for the thread in the current channel
-        async for thread in interaction.channel.guild.active_threads():
+        # If we're already in the correct thread, just resume here
+        if isinstance(interaction.channel, discord.Thread) and interaction.channel.name == thread_name:
+            # Check if user is a member of this thread
+            if any(member.id == user.id for member in interaction.channel.members):
+                session = TutoringSession(user, interaction.channel)
+                self.sessions[user.id] = session
+                
+                # Update last activity time
+                db.sessions_collection.update_one(
+                    {"user_id": user_id, "active": True}, 
+                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                )
+                
+                await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in this thread!", ephemeral=True)
+                return
+
+        # Search for the thread in the guild
+        guild = interaction.guild if interaction.guild else None
+        if guild:
+            async for thread in guild.active_threads():
             if thread.name == thread_name and any(member.id == user.id for member in thread.members):
                 # Recreate session object
                 session = TutoringSession(user, thread)
