@@ -23,6 +23,33 @@ class Tutor(commands.Cog):
             await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrody!", ephemeral=True)
             return
 
+        # Check if we're in an existing Schrody thread
+        if isinstance(interaction.channel, discord.Thread):
+            server_name = interaction.guild.name if interaction.guild else "DM"
+            expected_thread_name = f"Schrody-{server_name}"
+            
+            if interaction.channel.name == expected_thread_name:
+                # We're in an existing Schrody thread - ask for confirmation
+                embed = discord.Embed(
+                    title="⚠️ New Session Confirmation",
+                    description=f"{user.mention}, you're trying to start a new session in an existing thread. This will:",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="What happens if you proceed:",
+                    value="• Create a **new conversation** (previous context will be lost)\n• Create a **new thread** in the main channel\n• End any existing session context",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Alternatives:",
+                    value="• Use `/resume_session` to continue your existing conversation\n• Use `/ask` to continue in this thread if you have an active session",
+                    inline=False
+                )
+                embed.set_footer(text="Use the command again in the main channel if you want to start fresh, or use /resume_session to continue.")
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+
         # Use server name instead of username for thread name
         server_name = interaction.guild.name if interaction.guild else "DM"
         thread = await interaction.channel.create_thread(name=f"Schrody-{server_name}", type=discord.ChannelType.public_thread)
@@ -43,7 +70,17 @@ class Tutor(commands.Cog):
         # Check if user has an active session
         existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
         if not existing_session:
-            await interaction.followup.send("❌ You don't have an active session. Start one with `/start_session` first!")
+            embed = discord.Embed(
+                title="❌ No Active Session",
+                description="You don't have an active tutoring session.",
+                color=discord.Color.red()
+            )
+            embed.add_field(
+                name="💡 What you can do:",
+                value="1️⃣ **Try resuming:** Use `/resume_session` if you had a previous session\n2️⃣ **Start fresh:** Use `/start_session` to begin a new conversation",
+                inline=False
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
         # Get the user's session
@@ -179,7 +216,17 @@ class Tutor(commands.Cog):
             # Check if user has an active session
             existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
             if not existing_session:
-                await message.channel.send(f"❌ Your session has expired. You can resume it with `/resume_session` or start a new one with `/start_session`!")
+                embed = discord.Embed(
+                    title="❌ Session Expired",
+                    description=f"{message.author.mention}, your tutoring session has expired or ended.",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="💡 What you can do:",
+                    value="1️⃣ **Try resuming:** Use `/resume_session` to reconnect to your previous session\n2️⃣ **Start fresh:** Use `/start_session` to begin a new conversation",
+                    inline=False
+                )
+                await message.channel.send(embed=embed)
                 return
 
             # Show thinking indicator
