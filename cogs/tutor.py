@@ -27,7 +27,7 @@ class Tutor(commands.Cog):
         if isinstance(interaction.channel, discord.Thread):
             server_name = interaction.guild.name if interaction.guild else "DM"
             expected_thread_name = f"Schrödy-{server_name}"
-            
+
             if interaction.channel.name == expected_thread_name:
                 # We're in an existing Schrody thread - ask for confirmation
                 embed = discord.Embed(
@@ -46,13 +46,13 @@ class Tutor(commands.Cog):
                     inline=False
                 )
                 embed.set_footer(text="Use the command again in the main channel if you want to start fresh, or use /resume_session to continue.")
-                
+
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
         # Use server name instead of username for thread name
         server_name = interaction.guild.name if interaction.guild else "DM"
-        
+
         # Check if we're in a thread, if so, get the parent channel
         if isinstance(interaction.channel, discord.Thread):
             parent_channel = interaction.channel.parent
@@ -136,7 +136,7 @@ class Tutor(commands.Cog):
 
         # Delete the thinking message
         await thinking_message.delete()
-        
+
         # Split long messages into chunks to avoid Discord's 2000 character limit
         MAX_LENGTH = 2000
         if len(response) <= MAX_LENGTH:
@@ -145,7 +145,7 @@ class Tutor(commands.Cog):
             # Split the message into chunks
             chunks = []
             current_chunk = ""
-            
+
             for line in response.split('\n'):
                 if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
                     current_chunk += line + '\n'
@@ -153,10 +153,10 @@ class Tutor(commands.Cog):
                     if current_chunk:
                         chunks.append(current_chunk.rstrip())
                     current_chunk = line + '\n'
-            
+
             if current_chunk:
                 chunks.append(current_chunk.rstrip())
-            
+
             # Send each chunk
             for i, chunk in enumerate(chunks):
                 if i == 0:
@@ -193,13 +193,13 @@ class Tutor(commands.Cog):
             if any(member.id == user.id for member in interaction.channel.members):
                 session = TutoringSession(user, interaction.channel)
                 self.sessions[user.id] = session
-                
+
                 # Update last activity time
                 db.sessions_collection.update_one(
                     {"user_id": user_id, "active": True}, 
                     {"$set": {"last_activity": datetime.datetime.utcnow()}}
                 )
-                
+
                 await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
                 await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in this thread!", ephemeral=True)
                 return
@@ -209,20 +209,20 @@ class Tutor(commands.Cog):
         if guild:
             async for thread in guild.active_threads():
                 if thread.name == thread_name and any(member.id == user.id for member in thread.members):
-                # Recreate session object
-                session = TutoringSession(user, thread)
-                self.sessions[user.id] = session
+                    # Recreate session object
+                    session = TutoringSession(user, thread)
+                    self.sessions[user.id] = session
 
-                # Update last activity time
-                db.sessions_collection.update_one(
-                    {"user_id": user_id, "active": True}, 
-                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
-                )
+                    # Update last activity time
+                    db.sessions_collection.update_one(
+                        {"user_id": user_id, "active": True}, 
+                        {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                    )
 
-                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
-                await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in {thread.mention}!", ephemeral=True)
-                thread_found = True
-                break
+                    await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                    await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in {thread.mention}!", ephemeral=True)
+                    thread_found = True
+                    break
 
         if not thread_found:
             await interaction.response.send_message(f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", ephemeral=True)
@@ -231,16 +231,16 @@ class Tutor(commands.Cog):
     async def list_models(self, interaction: discord.Interaction):
         """List all available Gemini models."""
         from learnlm import list_models
-        
+
         embed = discord.Embed(
             title="🤖 Available AI Models",
             description="Here are the available Gemini models:",
             color=discord.Color.blue()
         )
-        
+
         models_text = list_models()
         embed.add_field(name="Models", value=models_text, inline=False)
-        
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
@@ -323,7 +323,7 @@ class Tutor(commands.Cog):
 
             # Delete the thinking message
             await thinking_message.delete()
-            
+
             # Split long messages into chunks to avoid Discord's 2000 character limit
             MAX_LENGTH = 2000
             if len(response) <= MAX_LENGTH:
@@ -332,7 +332,7 @@ class Tutor(commands.Cog):
                 # Split the message into chunks
                 chunks = []
                 current_chunk = ""
-                
+
                 for line in response.split('\n'):
                     if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
                         current_chunk += line + '\n'
@@ -340,10 +340,10 @@ class Tutor(commands.Cog):
                         if current_chunk:
                             chunks.append(current_chunk.rstrip())
                         current_chunk = line + '\n'
-                
+
                 if current_chunk:
                     chunks.append(current_chunk.rstrip())
-                
+
                 # Send each chunk
                 for i, chunk in enumerate(chunks):
                     if i == 0:
@@ -355,20 +355,20 @@ class Tutor(commands.Cog):
     async def check_inactive_sessions(self):
         """Check for inactive sessions and send reminders/close as needed."""
         now = datetime.datetime.utcnow()
-        
+
         for session in db.sessions_collection.find({"active": True}):
             time_since_activity = now - session.get("last_activity", session["start_time"])
-            
+
             # 30 minutes - close session
             if time_since_activity > datetime.timedelta(minutes=30):
                 db.end_session(session["user_id"])
                 user = await self.bot.fetch_user(int(session["user_id"]))
                 await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
-                
+
                 # Clean up session from memory
                 if int(session["user_id"]) in self.sessions:
                     del self.sessions[int(session["user_id"])]
-            
+
             # 15 minutes - send DM warning
             elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
                 user = await self.bot.fetch_user(int(session["user_id"]))
@@ -383,13 +383,13 @@ class Tutor(commands.Cog):
                     inline=False
                 )
                 await user.send(embed=embed)
-                
+
                 # Mark DM warning as sent
                 db.sessions_collection.update_one(
                     {"user_id": session["user_id"], "active": True},
                     {"$set": {"dm_warning_sent": True}}
                 )
-            
+
             # 5 minutes - send thread reminder with interaction
             elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
                 # Find the user's session thread
@@ -411,7 +411,7 @@ class Tutor(commands.Cog):
                         inline=False
                     )
                     await user_session.thread.send(embed=embed)
-                    
+
                     # Mark thread reminder as sent
                     db.sessions_collection.update_one(
                         {"user_id": session["user_id"], "active": True},
