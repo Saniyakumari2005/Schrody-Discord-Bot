@@ -207,7 +207,8 @@ class Tutor(commands.Cog):
         # Search for the thread in the guild
         guild = interaction.guild if interaction.guild else None
         if guild:
-            async for thread in guild.active_threads():
+            active_threads = await guild.active_threads()
+            for thread in active_threads:
                 if thread.name == thread_name and any(member.id == user.id for member in thread.members):
                     # Recreate session object
                     session = TutoringSession(user, thread)
