@@ -5,3 +5,8 @@ requests
 discord.py
 google-generativeai
 google-generativeai
+discord.py
+google-generativeai
+pymongo
+python-dotenv
+requests
