@@ -20,13 +20,13 @@ class Tutor(commands.Cog):
         existing_session = db.sessions_collection.find_one({"user_id": str(user.id), "active": True})
 
         if existing_session:
-            await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrody!", ephemeral=True)
+            await interaction.response.send_message(f"❌ {user.mention}, you already have an active session with Schrödy!", ephemeral=True)
             return
 
-        # Check if we're in an existing Schrody thread
+        # Check if we're in an existing Schrödy thread
         if isinstance(interaction.channel, discord.Thread):
             server_name = interaction.guild.name if interaction.guild else "DM"
-            expected_thread_name = f"Schrody-{server_name}"
+            expected_thread_name = f"Schrödy-{server_name}"
             
             if interaction.channel.name == expected_thread_name:
                 # We're in an existing Schrody thread - ask for confirmation
@@ -52,12 +52,12 @@ class Tutor(commands.Cog):
 
         # Use server name instead of username for thread name
         server_name = interaction.guild.name if interaction.guild else "DM"
-        thread = await interaction.channel.create_thread(name=f"Schrody-{server_name}", type=discord.ChannelType.public_thread)
+        thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
         session = TutoringSession(user, thread)
         self.sessions[user.id] = session
 
         db.start_session(interaction.user.id, interaction.user.name)
-        await thread.send(f"📚 {user.mention}, Schrody is here to assist you! Ask me anything.")
+        await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
         await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you in the thread I created.")
 
     @app_commands.command(name="ask", description="Ask Schrody a question.")
@@ -98,7 +98,7 @@ class Tutor(commands.Cog):
         # Build conversation context
         conversation_context = ""
         for msg in history:
-            role = "User" if msg["role"] == "user" else "Schrody"
+            role = "User" if msg["role"] == "user" else "Schrödy"
             conversation_context += f"{role}: {msg['message']}\n"
 
         # Create contextualized prompt
@@ -179,7 +179,7 @@ class Tutor(commands.Cog):
         # Try to find the existing thread
         thread_found = False
         server_name = interaction.guild.name if interaction.guild else "DM"
-        thread_name = f"Schrody-{server_name}"
+        thread_name = f"Schrödy-{server_name}"
 
         # Search for the thread in the current channel
         async for thread in interaction.channel.guild.active_threads():
@@ -201,6 +201,22 @@ class Tutor(commands.Cog):
 
         if not thread_found:
             await interaction.response.send_message(f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", ephemeral=True)
+
+    @app_commands.command(name="list_models", description="List available AI models.")
+    async def list_models(self, interaction: discord.Interaction):
+        """List all available Gemini models."""
+        from learnlm import list_models
+        
+        embed = discord.Embed(
+            title="🤖 Available AI Models",
+            description="Here are the available Gemini models:",
+            color=discord.Color.blue()
+        )
+        
+        models_text = list_models()
+        embed.add_field(name="Models", value=models_text, inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
@@ -250,7 +266,7 @@ class Tutor(commands.Cog):
             # Build conversation context
             conversation_context = ""
             for msg in history:
-                role = "User" if msg["role"] == "user" else "Schrody"
+                role = "User" if msg["role"] == "user" else "Schrödy"
                 conversation_context += f"{role}: {msg['message']}\n"
 
             # Create contextualized prompt

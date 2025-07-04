@@ -1,8 +1,8 @@
 
-# Schrody Discord Bot - Slash Commands Reference
+# Schrödy Discord Bot - Slash Commands Reference
 
 ## 🤖 **Bot Overview**
-Schrody is an AI-powered tutoring Discord bot that uses the Gemini API for educational assistance and MongoDB for data storage.
+Schrödy is an AI-powered tutoring Discord bot that uses the Gemini API for educational assistance and MongoDB for data storage.
 
 ---
 
@@ -17,8 +17,8 @@ Schrody is an AI-powered tutoring Discord bot that uses the Gemini API for educa
 ### **📚 Tutoring Commands**
 | Command | Description | Requirements |
 |---------|-------------|--------------|
-| `/start_session` | Start a tutoring session with Schrody | None |
-| `/ask <question>` | Ask Schrody a question | Active session required |
+| `/start_session` | Start a tutoring session with Schrödy | None |
+| `/ask <question>` | Ask Schrödy a question | Active session required |
 | `/resume_session` | Resume an existing tutoring session | Previous active session |
 | `/end_session` | End the current tutoring session | Active session |
 

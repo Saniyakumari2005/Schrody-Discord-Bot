@@ -38,7 +38,7 @@ class Feedback(commands.Cog):
             if not session.get("reminder_sent", False):
                 try:
                     user = await self.bot.fetch_user(int(session["user_id"]))
-                    await user.send("🔔 Reminder: Schrody is waiting for your feedback! Please use `/feedback <1-5>`.")
+                    await user.send("🔔 Reminder: Schrödy is waiting for your feedback! Please use `/feedback <1-5>`.")
                     
                     # Mark that we've sent a reminder for this session
                     db.sessions_collection.update_one(

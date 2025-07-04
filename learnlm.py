@@ -12,6 +12,17 @@ if not GEMINI_API_KEY:
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
+def list_models():
+    """List all available Gemini models."""
+    try:
+        models = genai.list_models()
+        model_list = []
+        for model in models:
+            model_list.append(f"• **{model.name}** - {model.description}")
+        return "\n".join(model_list) if model_list else "No models available"
+    except Exception as e:
+        return f"❌ Error listing models: {str(e)}"
+
 def ask_learnlm(prompt):
     """Send a user query to Gemini API and return the response."""
     try:
