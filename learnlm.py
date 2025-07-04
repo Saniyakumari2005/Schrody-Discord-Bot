@@ -16,7 +16,7 @@ def ask_learnlm(prompt):
     """Send a user query to Gemini API and return the response."""
     try:
         # Initialize the model with Gemini 2.5
-        model = genai.GenerativeModel('gemini-2.5-flash-exp')
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         # Comprehensive tutoring system prompt
         system_prompt = """You are Schrödy, a friendly and supportive tutor. Your goal is to help students understand concepts by guiding them through a topic, not by giving them the answer directly.
