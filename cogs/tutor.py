@@ -1,3 +1,4 @@
+
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -13,9 +14,8 @@ class Tutor(commands.Cog):
         self.sessions = {}
         self.check_inactive_sessions.start()
 
-
-@app_commands.command(name="start_session", description="Start a tutoring session.")
-async def start_session(self, interaction: discord.Interaction):
+    @app_commands.command(name="start_session", description="Start a tutoring session.")
+    async def start_session(self, interaction: discord.Interaction):
         """Starts a tutoring session and logs the start time."""
         user = interaction.user
         existing_session = db.sessions_collection.find_one({"user_id": str(user.id), "active": True})
@@ -67,7 +67,7 @@ async def start_session(self, interaction: discord.Interaction):
         await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
         await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you in the thread I created.")
 
-        @app_commands.command(name="ask", description="Ask Schrody a question.")
+    @app_commands.command(name="ask", description="Ask Schrody a question.")
     async def ask(self, interaction: discord.Interaction, question: str):
         # Defer the response immediately to prevent timeout
         await interaction.response.defer()
@@ -165,9 +165,8 @@ async def start_session(self, interaction: discord.Interaction):
                 else:
                     await session.thread.send(f"**(continued...)**\n{chunk}")
 
-
-@app_commands.command(name="resume_session", description="Resume your tutoring session.")
-async def resume_session(self, interaction: discord.Interaction):
+    @app_commands.command(name="resume_session", description="Resume your tutoring session.")
+    async def resume_session(self, interaction: discord.Interaction):
         """Resume an existing tutoring session."""
         user = interaction.user
         user_id = str(user.id)
@@ -287,7 +286,7 @@ async def resume_session(self, interaction: discord.Interaction):
                     ephemeral=True
                 )
 
-@app_commands.command(name="end_session", description="End the tutoring session.")
+    @app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
         """Ends a tutoring session and asks for feedback."""
         session = self.sessions.get(interaction.user.id)
@@ -298,7 +297,7 @@ async def resume_session(self, interaction: discord.Interaction):
         db.end_session(interaction.user.id)
         await interaction.response.send_message(f"📌 Your session has ended, {interaction.user.mention}. Please rate your experience with `/feedback <1-5>`.")
 
-@commands.Cog.listener()
+    @commands.Cog.listener()
     async def on_message(self, message):
         """Listen for messages in tutoring threads and respond automatically."""
         # Ignore bot messages
@@ -395,7 +394,7 @@ async def resume_session(self, interaction: discord.Interaction):
                     else:
                         await message.channel.send(f"**(continued...)**\n{chunk}")
 
-@tasks.loop(minutes=5)
+    @tasks.loop(minutes=5)
     async def check_inactive_sessions(self):
         """Check for inactive sessions and send reminders/close as needed."""
         now = datetime.datetime.utcnow()
@@ -461,5 +460,6 @@ async def resume_session(self, interaction: discord.Interaction):
                         {"user_id": session["user_id"], "active": True},
                         {"$set": {"thread_reminder_sent": True}}
                     )
+
 async def setup(bot):
     await bot.add_cog(Tutor(bot))
