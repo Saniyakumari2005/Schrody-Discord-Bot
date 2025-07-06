@@ -2,11 +2,5 @@ discord.py>=2.0.0
 pymongo
 python-dotenv
 requests
-discord.py
 google-generativeai
-google-generativeai
-discord.py
-google-generativeai
-pymongo
-python-dotenv
-requests
+
