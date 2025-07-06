@@ -4,9 +4,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 import db
 import datetime
-
 from learnlm import ask_learnlm
-from sessions import TutoringSession, session_manager
 
 class Tutor(commands.Cog):
     def __init__(self, bot):
@@ -60,8 +58,13 @@ class Tutor(commands.Cog):
             thread = await parent_channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
         else:
             thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
-        session = session_manager.create_session(thread)
-        user_session = session.add_user(user)
+        
+        # Store session in the simple format
+        self.sessions[user.id] = {
+            'thread': thread,
+            'user': user,
+            'start_time': datetime.datetime.utcnow()
+        }
 
         db.start_session(interaction.user.id, interaction.user.name)
         await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
@@ -90,17 +93,14 @@ class Tutor(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        # Get the thread's session
-        session = session_manager.get_session(interaction.channel.id)
-        if not session:
-            await interaction.followup.send("❌ No active session in this thread. Please start a new session with `/start_session`.")
+        # Check if user has a session and if we're in their thread
+        user_session = self.sessions.get(interaction.user.id)
+        if not user_session or interaction.channel != user_session['thread']:
+            await interaction.followup.send("❌ Please use this command in your tutoring thread or start a new session with `/start_session`.")
             return
-        
-        # Get or add user to the session
-        user_session = session.add_user(interaction.user)
 
         # Show thinking indicator
-        thinking_message = await session.thread.send("🤔 Schrödy is thinking...")
+        thinking_message = await interaction.channel.send("🤔 Schrödy is thinking...")
 
         # Retrieve conversation history
         history = db.get_conversation(user_id)
@@ -144,7 +144,7 @@ class Tutor(commands.Cog):
         # Split long messages into chunks to avoid Discord's 2000 character limit
         MAX_LENGTH = 2000
         if len(response) <= MAX_LENGTH:
-            await session.thread.send(response)
+            await interaction.channel.send(response)
         else:
             # Split the message into chunks
             chunks = []
@@ -164,9 +164,9 @@ class Tutor(commands.Cog):
             # Send each chunk
             for i, chunk in enumerate(chunks):
                 if i == 0:
-                    await session.thread.send(chunk)
+                    await interaction.channel.send(chunk)
                 else:
-                    await session.thread.send(f"**(continued...)**\n{chunk}")
+                    await interaction.channel.send(f"**(continued...)**\n{chunk}")
 
     @app_commands.command(name="resume_session", description="Resume your tutoring session.")
     async def resume_session(self, interaction: discord.Interaction):
@@ -202,8 +202,11 @@ class Tutor(commands.Cog):
             if isinstance(interaction.channel, discord.Thread) and interaction.channel.name == thread_name:
                 # Check if user is a member of this thread
                 if any(member.id == user.id for member in interaction.channel.members):
-                    session = TutoringSession(user, interaction.channel)
-                    self.sessions[user.id] = session
+                    self.sessions[user.id] = {
+                        'thread': interaction.channel,
+                        'user': user,
+                        'start_time': datetime.datetime.utcnow()
+                    }
 
                     # Update last activity time
                     db.sessions_collection.update_one(
@@ -227,8 +230,11 @@ class Tutor(commands.Cog):
                 for thread in active_threads:
                     if thread.name == thread_name and any(member.id == user.id for member in thread.members):
                         # Recreate session object
-                        session = TutoringSession(user, thread)
-                        self.sessions[user.id] = session
+                        self.sessions[user.id] = {
+                            'thread': thread,
+                            'user': user,
+                            'start_time': datetime.datetime.utcnow()
+                        }
 
                         # Update last activity time
                         db.sessions_collection.update_one(
@@ -250,8 +256,11 @@ class Tutor(commands.Cog):
                         if thread.name == thread_name and any(member.id == user.id for member in thread.members):
                             # Unarchive the thread by sending a message
                             try:
-                                session = TutoringSession(user, thread)
-                                self.sessions[user.id] = session
+                                self.sessions[user.id] = {
+                                    'thread': thread,
+                                    'user': user,
+                                    'start_time': datetime.datetime.utcnow()
+                                }
 
                                 # Update last activity time
                                 db.sessions_collection.update_one(
@@ -294,7 +303,7 @@ class Tutor(commands.Cog):
         """Ends a tutoring session and asks for feedback."""
         session = self.sessions.get(interaction.user.id)
         if session:
-            await session.thread.send(f"✅ {interaction.user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")
+            await session['thread'].send(f"✅ {interaction.user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")
             del self.sessions[interaction.user.id]
 
         db.end_session(interaction.user.id)
@@ -309,7 +318,7 @@ class Tutor(commands.Cog):
 
         # Check if message is in a tutoring thread
         session = self.sessions.get(message.author.id)
-        if session and message.channel == session.thread:
+        if session and message.channel == session['thread']:
             user_id = str(message.author.id)
 
             # Check if user has an active session
@@ -400,9 +409,10 @@ class Tutor(commands.Cog):
     @tasks.loop(minutes=5)
     async def check_inactive_sessions(self):
         """Check for inactive sessions and send reminders/close as needed."""
-        now = datetime.datetime.utcnow()
+        try:
+            now = datetime.datetime.utcnow()
 
-        for session in db.sessions_collection.find({"active": True}):
+            for session in db.sessions_collection.find({"active": True}):
             time_since_activity = now - session.get("last_activity", session["start_time"])
 
             # 30 minutes - close session
@@ -440,7 +450,7 @@ class Tutor(commands.Cog):
             elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
                 # Find the user's session thread
                 user_session = self.sessions.get(int(session["user_id"]))
-                if user_session and user_session.thread:
+                if user_session and user_session['thread']:
                     embed = discord.Embed(
                         title="💤 Are you still there?",
                         description=f"<@{session['user_id']}>, you've been inactive for 5 minutes.",
@@ -456,13 +466,15 @@ class Tutor(commands.Cog):
                         value="Just send any message or question to keep your session active!",
                         inline=False
                     )
-                    await user_session.thread.send(embed=embed)
+                    await user_session['thread'].send(embed=embed)
 
                     # Mark thread reminder as sent
                     db.sessions_collection.update_one(
                         {"user_id": session["user_id"], "active": True},
                         {"$set": {"thread_reminder_sent": True}}
                     )
+        except Exception as e:
+            print(f"Error in check_inactive_sessions: {e}")
 
 async def setup(bot):
     await bot.add_cog(Tutor(bot))
