@@ -416,17 +416,17 @@ class Tutor(commands.Cog):
                 time_since_activity = now - session.get("last_activity", session["start_time"])
 
                 # 30 minutes - close session
-                if time_since_activity > datetime.timedelta(minutes=30):
-                db.end_session(session["user_id"])
-                    user = await self.bot.fetch_user(int(session["user_id"]))
-                    await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
+            if time_since_activity > datetime.timedelta(minutes=30):
+                 db.end_session(session["user_id"])
+            user = await self.bot.fetch_user(int(session["user_id"]))
+            await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
 
                     # Clean up session from memory
-                    if int(session["user_id"]) in self.sessions:
+            if int(session["user_id"]) in self.sessions:
                         del self.sessions[int(session["user_id"])]
 
                 # 15 minutes - send DM warning
-                elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
+            elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
                     user = await self.bot.fetch_user(int(session["user_id"]))
                     embed = discord.Embed(
                         title="⚠️ Inactivity Warning",
@@ -447,7 +447,7 @@ class Tutor(commands.Cog):
                     )
 
                 # 5 minutes - send thread reminder with interaction
-                elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
+            elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
                     # Find the user's session thread
                     user_session = self.sessions.get(int(session["user_id"]))
                     if user_session and user_session['thread']:
