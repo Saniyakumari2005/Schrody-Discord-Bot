@@ -166,7 +166,7 @@ class Tutor(commands.Cog):
 
 
 @app_commands.command(name="resume_session", description="Resume your tutoring session.")
-    async def resume_session(self, interaction: discord.Interaction):
+async def resume_session(self, interaction: discord.Interaction):
         """Resume an existing tutoring session."""
         user = interaction.user
         user_id = str(user.id)
