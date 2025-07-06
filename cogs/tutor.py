@@ -13,8 +13,9 @@ class Tutor(commands.Cog):
         self.sessions = {}
         self.check_inactive_sessions.start()
 
-    @app_commands.command(name="start_session", description="Start a tutoring session.")
-    async def start_session(self, interaction: discord.Interaction):
+
+@app_commands.command(name="start_session", description="Start a tutoring session.")
+async def start_session(self, interaction: discord.Interaction):
         """Starts a tutoring session and logs the start time."""
         user = interaction.user
         existing_session = db.sessions_collection.find_one({"user_id": str(user.id), "active": True})
@@ -66,7 +67,7 @@ class Tutor(commands.Cog):
         await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
         await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you in the thread I created.")
 
-    @app_commands.command(name="ask", description="Ask Schrody a question.")
+        @app_commands.command(name="ask", description="Ask Schrody a question.")
     async def ask(self, interaction: discord.Interaction, question: str):
         # Defer the response immediately to prevent timeout
         await interaction.response.defer()
@@ -166,7 +167,7 @@ class Tutor(commands.Cog):
 
 
 @app_commands.command(name="resume_session", description="Resume your tutoring session.")
-    async def resume_session(self, interaction: discord.Interaction):
+async def resume_session(self, interaction: discord.Interaction):
         """Resume an existing tutoring session."""
         user = interaction.user
         user_id = str(user.id)
