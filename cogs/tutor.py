@@ -164,22 +164,30 @@ class Tutor(commands.Cog):
                 else:
                     await session.thread.send(f"**(continued...)**\n{chunk}")
 
-    @app_commands.command(name="resume_session", description="Resume your tutoring session.")
-    async def resume_session(self, interaction: discord.Interaction):
-        """Resume an existing tutoring session."""
-        user = interaction.user
-        user_id = str(user.id)
 
+@app_commands.command(name="resume_session", description="Resume your tutoring session.")
+async def resume_session(self, interaction: discord.Interaction):
+    """Resume an existing tutoring session."""
+    user = interaction.user
+    user_id = str(user.id)
+
+    try:
         # Check if user has an active session in database
         existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
         if not existing_session:
-            await interaction.response.send_message(f"❌ {user.mention}, you don't have an active session to resume. Use `/start_session` to begin a new one!", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {user.mention}, you don't have an active session to resume. Use `/start_session` to begin a new one!", 
+                ephemeral=True
+            )
             return
 
         # Check if session is already in memory
         if user.id in self.sessions:
             session = self.sessions[user.id]
-            await interaction.response.send_message(f"✅ {user.mention}, your session is already active! Continue chatting in {session.thread.mention}.", ephemeral=True)
+            await interaction.response.send_message(
+                f"✅ {user.mention}, your session is already active! Continue chatting in {session.thread.mention}.", 
+                ephemeral=True
+            )
             return
 
         # Try to find the existing thread
@@ -200,13 +208,18 @@ class Tutor(commands.Cog):
                     {"$set": {"last_activity": datetime.datetime.utcnow()}}
                 )
 
+                # Send response first, then the welcome message
+                await interaction.response.send_message(
+                    f"✅ {user.mention}, your session has been resumed in this thread!", 
+                    ephemeral=True
+                )
                 await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
-                await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in this thread!", ephemeral=True)
                 return
 
         # Search for the thread in the guild
         guild = interaction.guild if interaction.guild else None
         if guild:
+            # First check active threads
             active_threads = await guild.active_threads()
             for thread in active_threads:
                 if thread.name == thread_name and any(member.id == user.id for member in thread.members):
@@ -220,29 +233,58 @@ class Tutor(commands.Cog):
                         {"$set": {"last_activity": datetime.datetime.utcnow()}}
                     )
 
+                    await interaction.response.send_message(
+                        f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
+                        ephemeral=True
+                    )
                     await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
-                    await interaction.response.send_message(f"✅ {user.mention}, your session has been resumed in {thread.mention}!", ephemeral=True)
                     thread_found = True
                     break
 
+            # If not found in active threads, check archived threads
+            if not thread_found:
+                async for thread in guild.archived_threads(limit=50):
+                    if thread.name == thread_name and any(member.id == user.id for member in thread.members):
+                        # Unarchive the thread by sending a message
+                        try:
+                            session = TutoringSession(user, thread)
+                            self.sessions[user.id] = session
+
+                            # Update last activity time
+                            db.sessions_collection.update_one(
+                                {"user_id": user_id, "active": True}, 
+                                {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                            )
+
+                            await interaction.response.send_message(
+                                f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
+                                ephemeral=True
+                            )
+                            await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                            thread_found = True
+                            break
+                        except discord.Forbidden:
+                            # Can't access archived thread
+                            continue
+
         if not thread_found:
-            await interaction.response.send_message(f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", 
+                ephemeral=True
+            )
 
-    @app_commands.command(name="list_models", description="List available AI models.")
-    async def list_models(self, interaction: discord.Interaction):
-        """List all available Gemini models."""
-        from learnlm import list_models
-
-        embed = discord.Embed(
-            title="🤖 Available AI Models",
-            description="Here are the available Gemini models:",
-            color=discord.Color.blue()
-        )
-
-        models_text = list_models()
-        embed.add_field(name="Models", value=models_text, inline=False)
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        print(f"Error in resume_session: {e}")
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                f"❌ {user.mention}, an error occurred while resuming your session. Please try again or start a new session.", 
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                f"❌ {user.mention}, an error occurred while resuming your session. Please try again or start a new session.", 
+                ephemeral=True
+            )
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
