@@ -286,7 +286,7 @@ async def resume_session(self, interaction: discord.Interaction):
                 ephemeral=True
             )
 
-    @app_commands.command(name="end_session", description="End the tutoring session.")
+@app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
         """Ends a tutoring session and asks for feedback."""
         session = self.sessions.get(interaction.user.id)
