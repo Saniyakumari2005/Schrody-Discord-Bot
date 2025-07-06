@@ -460,6 +460,5 @@ class Tutor(commands.Cog):
                         {"user_id": session["user_id"], "active": True},
                         {"$set": {"thread_reminder_sent": True}}
                     )
-
 async def setup(bot):
     await bot.add_cog(Tutor(bot))
