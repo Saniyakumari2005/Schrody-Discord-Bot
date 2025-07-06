@@ -147,7 +147,7 @@ class TutoringSession:
             'users': [us.user.display_name for us in self.user_sessions.values()]
         }
 
-# Example usage in your bot commands:
+
 
 # You'll also need to modify your session management:
 class SessionManager:
