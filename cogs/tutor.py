@@ -166,7 +166,7 @@ class Tutor(commands.Cog):
 
 
 @app_commands.command(name="resume_session", description="Resume your tutoring session.")
-    async def resume_session(self, interaction: discord.Interaction):
+async def resume_session(self, interaction: discord.Interaction):
         """Resume an existing tutoring session."""
         user = interaction.user
         user_id = str(user.id)
@@ -286,8 +286,8 @@ class Tutor(commands.Cog):
                     ephemeral=True
                 )
 
-    @app_commands.command(name="end_session", description="End the tutoring session.")
-    async def end_session(self, interaction: discord.Interaction):
+@app_commands.command(name="end_session", description="End the tutoring session.")
+async def end_session(self, interaction: discord.Interaction):
         """Ends a tutoring session and asks for feedback."""
         session = self.sessions.get(interaction.user.id)
         if session:
@@ -297,8 +297,8 @@ class Tutor(commands.Cog):
         db.end_session(interaction.user.id)
         await interaction.response.send_message(f"📌 Your session has ended, {interaction.user.mention}. Please rate your experience with `/feedback <1-5>`.")
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
+@commands.Cog.listener()
+async def on_message(self, message):
         """Listen for messages in tutoring threads and respond automatically."""
         # Ignore bot messages
         if message.author.bot:
@@ -394,8 +394,8 @@ class Tutor(commands.Cog):
                     else:
                         await message.channel.send(f"**(continued...)**\n{chunk}")
 
-    @tasks.loop(minutes=5)
-    async def check_inactive_sessions(self):
+@tasks.loop(minutes=5)
+async def check_inactive_sessions(self):
         """Check for inactive sessions and send reminders/close as needed."""
         now = datetime.datetime.utcnow()
 
