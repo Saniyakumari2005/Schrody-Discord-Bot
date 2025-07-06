@@ -6,7 +6,7 @@ import db
 import datetime
 
 from learnlm import ask_learnlm
-from sessions import TutoringSession
+from sessions import TutoringSession, session_manager
 
 class Tutor(commands.Cog):
     def __init__(self, bot):
@@ -60,8 +60,8 @@ class Tutor(commands.Cog):
             thread = await parent_channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
         else:
             thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
-        session = TutoringSession(user, thread)
-        self.sessions[user.id] = session
+        session = session_manager.create_session(thread)
+        user_session = session.add_user(user)
 
         db.start_session(interaction.user.id, interaction.user.name)
         await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
@@ -90,11 +90,14 @@ class Tutor(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        # Get the user's session
-        session = self.sessions.get(interaction.user.id)
+        # Get the thread's session
+        session = session_manager.get_session(interaction.channel.id)
         if not session:
-            await interaction.followup.send("❌ Session not found. Please start a new session with `/start_session`.")
+            await interaction.followup.send("❌ No active session in this thread. Please start a new session with `/start_session`.")
             return
+        
+        # Get or add user to the session
+        user_session = session.add_user(interaction.user)
 
         # Show thinking indicator
         thinking_message = await session.thread.send("🤔 Schrödy is thinking...")
