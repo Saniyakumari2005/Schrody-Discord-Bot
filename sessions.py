@@ -4,7 +4,6 @@ import db
 import discord
 from typing import Dict, Optional
 
-
 class UserSession:
     """Represents an individual user's session within a tutoring thread."""
     
@@ -61,16 +60,33 @@ class TutoringSession:
     
     def remove_inactive_users(self):
         """Remove users who have been inactive for too long."""
-        current_time = datetime.datetime.utcnow()
-        inactive_users = []
-        
-        for user_id, user_session in self.user_sessions.items():
-            time_since_activity = (current_time - user_session.last_activity).total_seconds()
-            if time_since_activity > self.session_timeout:
-                inactive_users.append(user_id)
-        
-        for user_id in inactive_users:
-            del self.user_sessions[user_id]
+        try:
+            current_time = datetime.datetime.utcnow()
+            inactive_users = []
+            
+            for user_id, user_session in self.user_sessions.items():
+                try:
+                    # Check if last_activity exists and is valid
+                    if hasattr(user_session, 'last_activity') and user_session.last_activity:
+                        time_since_activity = (current_time - user_session.last_activity).total_seconds()
+                        if time_since_activity > self.session_timeout:
+                            inactive_users.append(user_id)
+                    else:
+                        # If last_activity is missing, consider user inactive
+                        inactive_users.append(user_id)
+                except (AttributeError, TypeError, ValueError) as e:
+                    # If there's any error calculating time, mark user as inactive
+                    print(f"Error calculating activity time for user {user_id}: {e}")
+                    inactive_users.append(user_id)
+            
+            # Remove inactive users
+            for user_id in inactive_users:
+                if user_id in self.user_sessions:
+                    del self.user_sessions[user_id]
+                    
+        except Exception as e:
+            print(f"Error in remove_inactive_users: {e}")
+            # Continue execution even if cleanup fails
     
     async def process_message(self, message):
         """Processes user input and gets a response from LearnLM with user-specific context."""
@@ -147,7 +163,7 @@ class TutoringSession:
             'users': [us.user.display_name for us in self.user_sessions.values()]
         }
 
-
+# Example usage in your bot commands:
 
 # You'll also need to modify your session management:
 class SessionManager:
@@ -170,42 +186,59 @@ class SessionManager:
         """End and remove a session."""
         if thread_id in self.sessions:
             del self.sessions[thread_id]
+    
+    def cleanup_inactive_sessions(self):
+        """Clean up inactive users across all sessions."""
+        try:
+            for session in self.sessions.values():
+                if session.active:
+                    session.remove_inactive_users()
+        except Exception as e:
+            print(f"Error in cleanup_inactive_sessions: {e}")
+    
+    def get_all_sessions_stats(self) -> dict:
+        """Get statistics for all active sessions."""
+        return {
+            'total_sessions': len(self.sessions),
+            'active_sessions': len([s for s in self.sessions.values() if s.active]),
+            'total_users': sum(len(s.user_sessions) for s in self.sessions.values())
+        }
 
 # Global session manager instance
 session_manager = SessionManager()
 
 # Example bot command handlers:
-async def start_session_command(ctx):
+async def start_session_command(slash):
     """Start a new tutoring session in the current thread."""
-    session = session_manager.create_session(ctx.channel)
-    await ctx.send(f"🎓 Tutoring session started! Users can now ask questions and I'll maintain separate conversations with each person.")
+    session = session_manager.create_session(slash.channel)
+    await slash.send(f"🎓 Tutoring session started! Users can now ask questions and I'll maintain separate conversations with each person.")
 
-async def join_session_command(ctx):
+async def join_session_command(slash):
     """Join an existing tutoring session."""
-    session = session_manager.get_session(ctx.channel.id)
+    session = session_manager.get_session(slash.channel.id)
     if session and session.active:
-        user_session = session.add_user(ctx.author)
-        await ctx.send(f"✅ {ctx.author.mention}, you've joined the tutoring session!")
+        user_session = session.add_user(slash.author)
+        await slash.send(f"✅ {slash.author.mention}, you've joined the tutoring session!")
     else:
-        await ctx.send("❌ No active tutoring session in this thread. Start one with `/start_session`.")
+        await slash.send("❌ No active tutoring session in this thread. Start one with `/start_session`.")
 
-async def leave_session_command(ctx):
+async def leave_session_command(slash):
     """Leave the current tutoring session."""
-    session = session_manager.get_session(ctx.channel.id)
+    session = session_manager.get_session(slash.channel.id)
     if session:
-        await session.end_user_session(ctx.author)
+        await session.end_user_session(slash.author)
     else:
-        await ctx.send("❌ No active tutoring session in this thread.")
+        await slash.send("❌ No active tutoring session in this thread.")
 
-async def session_stats_command(ctx):
+async def session_stats_command(slash):
     """Show statistics about the current session."""
-    session = session_manager.get_session(ctx.channel.id)
+    session = session_manager.get_session(slash.channel.id)
     if session and session.active:
         stats = session.get_session_stats()
-        await ctx.send(f"📊 Session Stats:\n"
-                      f"• Total users: {stats['total_users']}\n"
-                      f"• Active users: {stats['active_users']}\n"
-                      f"• Duration: {stats['session_duration']:.0f} seconds\n"
-                      f"• Users: {', '.join(stats['users'])}")
+        await slash.send(f"📊 Session Stats:\n"
+                        f"• Total users: {stats['total_users']}\n"
+                        f"• Active users: {stats['active_users']}\n"
+                        f"• Duration: {stats['session_duration']:.0f} seconds\n"
+                        f"• Users: {', '.join(stats['users'])}")
     else:
-        await ctx.send("❌ No active tutoring session in this thread.")
+        await slash.send("❌ No active tutoring session in this thread.")

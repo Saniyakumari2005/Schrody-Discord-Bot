@@ -1,4 +1,3 @@
-
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -58,7 +57,7 @@ class Tutor(commands.Cog):
             thread = await parent_channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
         else:
             thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
-        
+
         # Store session in the simple format
         self.sessions[user.id] = {
             'thread': thread,
@@ -188,7 +187,7 @@ class Tutor(commands.Cog):
             if user.id in self.sessions:
                 session = self.sessions[user.id]
                 await interaction.response.send_message(
-                    f"✅ {user.mention}, your session is already active! Continue chatting in {session.thread.mention}.", 
+                    f"✅ {user.mention}, your session is already active! Continue chatting in {session['thread'].mention}.", 
                     ephemeral=True
                 )
                 return
@@ -413,68 +412,94 @@ class Tutor(commands.Cog):
             now = datetime.datetime.utcnow()
 
             for session in db.sessions_collection.find({"active": True}):
-                time_since_activity = now - session.get("last_activity", session["start_time"])
+                try:
+                    time_since_activity = now - session.get("last_activity", session["start_time"])
+                    user_id = session["user_id"]
 
-                # 30 minutes - close session
-            if time_since_activity > datetime.timedelta(minutes=30):
-                 db.end_session(session["user_id"])
-            user = await self.bot.fetch_user(int(session["user_id"]))
-            await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
+                    # 30 minutes - close session
+                    if time_since_activity > datetime.timedelta(minutes=30):
+                        db.end_session(user_id)
 
-                    # Clean up session from memory
-            if int(session["user_id"]) in self.sessions:
-                        del self.sessions[int(session["user_id"])]
+                        try:
+                            user = await self.bot.fetch_user(int(user_id))
+                            await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
+                        except (discord.NotFound, discord.Forbidden):
+                            # User not found or DMs disabled
+                            pass
 
-                # 15 minutes - send DM warning
-            elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
-                    user = await self.bot.fetch_user(int(session["user_id"]))
-                    embed = discord.Embed(
-                        title="⚠️ Inactivity Warning",
-                        description="Your tutoring session will close in 15 minutes due to inactivity.",
-                        color=discord.Color.orange()
-                    )
-                    embed.add_field(
-                        name="💡 Keep your session active:",
-                        value="Send a message in your session thread to continue learning!",
-                        inline=False
-                    )
-                    await user.send(embed=embed)
+                        # Clean up session from memory
+                        if int(user_id) in self.sessions:
+                            del self.sessions[int(user_id)]
 
-                    # Mark DM warning as sent
-                    db.sessions_collection.update_one(
-                        {"user_id": session["user_id"], "active": True},
-                        {"$set": {"dm_warning_sent": True}}
-                    )
+                    # 15 minutes - send DM warning
+                    elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
+                        try:
+                            user = await self.bot.fetch_user(int(user_id))
+                            embed = discord.Embed(
+                                title="⚠️ Inactivity Warning",
+                                description="Your tutoring session will close in 15 minutes due to inactivity.",
+                                color=discord.Color.orange()
+                            )
+                            embed.add_field(
+                                name="💡 Keep your session active:",
+                                value="Send a message in your session thread to continue learning!",
+                                inline=False
+                            )
+                            await user.send(embed=embed)
 
-                # 5 minutes - send thread reminder with interaction
-            elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
-                    # Find the user's session thread
-                    user_session = self.sessions.get(int(session["user_id"]))
-                    if user_session and user_session['thread']:
-                        embed = discord.Embed(
-                            title="💤 Are you still there?",
-                            description=f"<@{session['user_id']}>, you've been inactive for 5 minutes.",
-                            color=discord.Color.yellow()
-                        )
-                        embed.add_field(
-                            name="⏰ Session will close in:",
-                            value="25 minutes if no activity is detected",
-                            inline=False
-                        )
-                        embed.add_field(
-                            name="💬 To continue:",
-                            value="Just send any message or question to keep your session active!",
-                            inline=False
-                        )
-                        await user_session['thread'].send(embed=embed)
+                            # Mark DM warning as sent
+                            db.sessions_collection.update_one(
+                                {"user_id": user_id, "active": True},
+                                {"$set": {"dm_warning_sent": True}}
+                            )
+                        except (discord.NotFound, discord.Forbidden):
+                            # User not found or DMs disabled
+                            pass
 
-                        # Mark thread reminder as sent
-                        db.sessions_collection.update_one(
-                            {"user_id": session["user_id"], "active": True},
-                            {"$set": {"thread_reminder_sent": True}}
-                        )
+                    # 5 minutes - send thread reminder with interaction
+                    elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
+                        # Find the user's session thread
+                        user_session = self.sessions.get(int(user_id))
+                        if user_session and user_session['thread']:
+                            try:
+                                embed = discord.Embed(
+                                    title="💤 Are you still there?",
+                                    description=f"<@{user_id}>, you've been inactive for 5 minutes.",
+                                    color=discord.Color.yellow()
+                                )
+                                embed.add_field(
+                                    name="⏰ Session will close in:",
+                                    value="25 minutes if no activity is detected",
+                                    inline=False
+                                )
+                                embed.add_field(
+                                    name="💬 To continue:",
+                                    value="Just send any message or question to keep your session active!",
+                                    inline=False
+                                )
+                                await user_session['thread'].send(embed=embed)
+
+                                # Mark thread reminder as sent
+                                db.sessions_collection.update_one(
+                                    {"user_id": user_id, "active": True},
+                                    {"$set": {"thread_reminder_sent": True}}
+                                )
+                            except discord.NotFound:
+                                # Thread might have been deleted
+                                pass
+
+                except Exception as e:
+                    print(f"Error processing session for user {session.get('user_id', 'unknown')}: {e}")
+                    continue
+
         except Exception as e:
             print(f"Error in check_inactive_sessions: {e}")
 
+    @check_inactive_sessions.before_loop
+    async def before_check_inactive_sessions(self):
+        """Wait until the bot is ready before starting the task."""
+        await self.bot.wait_until_ready()
+
 async def setup(bot):
+    """Setup function for the cog."""
     await bot.add_cog(Tutor(bot))
