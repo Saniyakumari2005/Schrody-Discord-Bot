@@ -4,12 +4,22 @@ from discord.ext import commands, tasks
 import db
 import datetime
 from learnlm import ask_learnlm
+from sessions import session_manager 
 
 class Tutor(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.sessions = {}
+        self.guest_participation_asked = set()  # Track users who have been asked about participation
         self.check_inactive_sessions.start()
+
+    def get_user_display_name(self, user, guild):
+        """Get user's display name (nickname if available, otherwise username)"""
+        if guild:
+            member = guild.get_member(user.id)
+            if member and member.nick:
+                return member.nick
+            return member.display_name if member else user.display_name
+        return user.display_name
 
     @app_commands.command(name="start_session", description="Start a tutoring session.")
     async def start_session(self, interaction: discord.Interaction):
@@ -23,10 +33,10 @@ class Tutor(commands.Cog):
 
         # Check if we're in an existing Schrödy thread
         if isinstance(interaction.channel, discord.Thread):
-            server_name = interaction.guild.name if interaction.guild else "DM"
-            expected_thread_name = f"Schrödy-{server_name}"
+            user_display_name = self.get_user_display_name(user, interaction.guild)
+            expected_thread_name = f"Schrödy-{user_display_name}"
 
-            if interaction.channel.name == expected_thread_name:
+            if interaction.channel.name.startswith("Schrödy-"):
                 # We're in an existing Schrody thread - ask for confirmation
                 embed = discord.Embed(
                     title="⚠️ New Session Confirmation",
@@ -48,164 +58,214 @@ class Tutor(commands.Cog):
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
 
-        # Use server name instead of username for thread name
-        server_name = interaction.guild.name if interaction.guild else "DM"
+        # Use user's display name for thread name
+        user_display_name = self.get_user_display_name(user, interaction.guild)
 
         # Check if we're in a thread, if so, get the parent channel
         if isinstance(interaction.channel, discord.Thread):
             parent_channel = interaction.channel.parent
-            thread = await parent_channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
+            thread = await parent_channel.create_thread(name=f"Schrödy-{user_display_name}", type=discord.ChannelType.public_thread)
         else:
-            thread = await interaction.channel.create_thread(name=f"Schrödy-{server_name}", type=discord.ChannelType.public_thread)
+            thread = await interaction.channel.create_thread(name=f"Schrödy-{user_display_name}", type=discord.ChannelType.public_thread)
 
-        # Store session in the simple format
-        self.sessions[user.id] = {
-            'thread': thread,
-            'user': user,
-            'start_time': datetime.datetime.utcnow()
-        }
+        # Create session using sessions.py system
+        session = session_manager.create_session(thread)
+        user_session = session.add_user(user)
 
         db.start_session(interaction.user.id, interaction.user.name)
-        await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.")
+        await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
         await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you in the thread I created.")
 
     @app_commands.command(name="ask", description="Ask Schrody a question.")
     async def ask(self, interaction: discord.Interaction, question: str):
-        # Defer the response immediately to prevent timeout
+        # Show thinking indicator immediately before deferring with user identification
+        user_display_name = self.get_user_display_name(interaction.user, interaction.guild)
+        thinking_message = await interaction.channel.send(f"🤔 Schrödy is thinking... (responding to {user_display_name})")
+
+        # Defer the response to prevent timeout
         await interaction.response.defer()
 
         user_id = str(interaction.user.id)
+        user_int_id = interaction.user.id
 
-        # Check if user has an active session
-        existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
-        if not existing_session:
-            embed = discord.Embed(
-                title="❌ No Active Session",
-                description="You don't have an active tutoring session.",
-                color=discord.Color.red()
-            )
-            embed.add_field(
-                name="💡 What you can do:",
-                value="1️⃣ **Try resuming:** Use `/resume_session` if you had a previous session\n2️⃣ **Start fresh:** Use `/start_session` to begin a new conversation",
-                inline=False
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
+        try:
+            # Check if user has an active session
+            existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
 
-        # Check if user has a session and if we're in their thread
-        user_session = self.sessions.get(interaction.user.id)
-        if not user_session or interaction.channel != user_session['thread']:
-            await interaction.followup.send("❌ Please use this command in your tutoring thread or start a new session with `/start_session`.")
-            return
-
-        # Show thinking indicator
-        thinking_message = await interaction.channel.send("🤔 Schrödy is thinking...")
-
-        # Retrieve conversation history
-        history = db.get_conversation(user_id)
-
-        # Build conversation context
-        conversation_context = ""
-        for msg in history:
-            role = "User" if msg["role"] == "user" else "Schrödy"
-            conversation_context += f"{role}: {msg['message']}\n"
-
-        # Create contextualized prompt
-        if conversation_context:
-            contextualized_question = f"Previous conversation:\n{conversation_context}\nUser: {question}"
-        else:
-            contextualized_question = question
-
-        # Update last activity time and reset reminder flags
-        db.sessions_collection.update_one(
-            {"user_id": user_id, "active": True},
-            {
-                "$set": {
-                    "last_activity": datetime.datetime.utcnow(),
-                    "thread_reminder_sent": False,
-                    "dm_warning_sent": False
-                }
-            }
-        )
-
-        # Save the user's question
-        db.add_message(user_id, question, role="user")
-
-        # Get response from LearnLM with context
-        response = ask_learnlm(contextualized_question)
-
-        # Save AI response
-        db.add_message(user_id, response, role="ai")
-
-        # Delete the thinking message
-        await thinking_message.delete()
-
-        # Split long messages into chunks to avoid Discord's 2000 character limit
-        MAX_LENGTH = 2000
-        if len(response) <= MAX_LENGTH:
-            await interaction.channel.send(response)
-        else:
-            # Split the message into chunks
-            chunks = []
-            current_chunk = ""
-
-            for line in response.split('\n'):
-                if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
-                    current_chunk += line + '\n'
+            if existing_session:
+                # User has active session - check if we're in a tutoring thread
+                if isinstance(interaction.channel, discord.Thread) and interaction.channel.name.startswith("Schrödy-"):
+                    session = session_manager.get_session(interaction.channel.id)
+                    if session:
+                        user_session = session.get_user_session(user_int_id)
+                        if user_session:
+                            # Handle as active session owner
+                            await self._handle_active_user_question(interaction, question, user_id, user_int_id, session, thinking_message)
+                        else:
+                            await thinking_message.delete()
+                            await interaction.followup.send("❌ Please use this command in your tutoring thread or start a new session with `/start_session`.")
+                    else:
+                        await thinking_message.delete()
+                        await interaction.followup.send("❌ Please use this command in your tutoring thread or start a new session with `/start_session`.")
                 else:
-                    if current_chunk:
-                        chunks.append(current_chunk.rstrip())
-                    current_chunk = line + '\n'
-
-            if current_chunk:
-                chunks.append(current_chunk.rstrip())
-
-            # Send each chunk
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    await interaction.channel.send(chunk)
+                    await thinking_message.delete()
+                    await interaction.followup.send("❌ Please use this command in your tutoring thread or start a new session with `/start_session`.")
+            else:
+                # User doesn't have active session - check if they're in someone else's thread
+                if isinstance(interaction.channel, discord.Thread) and interaction.channel.name.startswith("Schrödy-"):
+                    # They're in a tutoring thread - handle as guest
+                    await self._handle_guest_user_question(interaction, question, user_id, user_int_id, thinking_message)
                 else:
-                    await interaction.channel.send(f"**(continued...)**\n{chunk}")
+                    # Not in a tutoring thread and no active session
+                    await thinking_message.delete()
+                    embed = discord.Embed(
+                        title="❌ No Active Session",
+                        description="You don't have an active tutoring session.",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(
+                        name="💡 What you can do:",
+                        value="1️⃣ **Try resuming:** Use `/resume_session` if you had a previous session\n2️⃣ **Start fresh:** Use `/start_session` to begin a new conversation\n3️⃣ **Join a session:** Use this command in an existing Schrödy thread to participate as a guest",
+                        inline=False
+                    )
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+        except Exception as e:
+            await thinking_message.delete()
+            print(f"Error in ask command: {e}")
+            await interaction.followup.send("❌ An error occurred while processing your question. Please try again.", ephemeral=True)
 
-    @app_commands.command(name="resume_session", description="Resume your tutoring session.")
+    async def _handle_active_user_question(self, interaction, question, user_id, user_int_id, session, thinking_message):
+        """Handle question from user with active session using sessions.py system."""
+        try:
+            # Process the message through the session system
+            # Create a mock message object for the session system
+            class MockMessage:
+                def __init__(self, content, author, channel):
+                    self.content = content
+                    self.author = author
+                    self.channel = channel
+
+            mock_message = MockMessage(question, interaction.user, interaction.channel)
+
+            # Let the session system handle the message processing
+            await session.process_message(mock_message)
+
+            # Delete the thinking message
+            await thinking_message.delete()
+        except Exception as e:
+            await thinking_message.delete()
+            print(f"Error handling active user question: {e}")
+            await interaction.followup.send("❌ An error occurred while processing your question. Please try again.", ephemeral=True)
+
+    async def _handle_guest_user_question(self, interaction, question, user_id, user_int_id, thinking_message):
+        """Handle question from guest user."""
+        try:
+            thread_id = interaction.channel.id
+            session = session_manager.get_session(thread_id)
+
+            if not session:
+                await thinking_message.delete()
+                await interaction.followup.send("❌ This appears to be an inactive tutoring thread. Please start a new session with `/start_session`.")
+                return
+
+            # Ask about participation if not already asked
+            if user_int_id not in self.guest_participation_asked:
+                self.guest_participation_asked.add(user_int_id)
+
+                # Create participation confirmation embed
+                embed = discord.Embed(
+                    title="🤝 Join Session as Guest?",
+                    description=f"{interaction.user.mention}, you're about to participate in another user's tutoring session as a guest.",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="As a guest, you will:",
+                    value="• Be able to ask questions and get responses\n• Have your conversation saved for context\n• Get suggestions to start your own session for personalized help\n• Participate in the shared learning environment",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Note:",
+                    value="This is a one-time confirmation. You can always start your own session later with `/start_session`.",
+                    inline=False
+                )
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+            # Add user to session as guest
+            guest_session = session.add_user(interaction.user)
+
+            # Create a mock message object for the session system
+            class MockMessage:
+                def __init__(self, content, author, channel):
+                    self.content = content
+                    self.author = author
+                    self.channel = channel
+
+            mock_message = MockMessage(question, interaction.user, interaction.channel)
+
+            # Let the session system handle the message processing
+            await session.process_message(mock_message)
+
+            # Delete the thinking message
+            await thinking_message.delete()
+        except Exception as e:
+            await thinking_message.delete()
+            print(f"Error handling guest user question: {e}")
+            await interaction.followup.send("❌ An error occurred while processing your question. Please try again.", ephemeral=True)
+
+    @app_commands.command(name="resume_session", description="Resume your tutoring session (works for both active and ended sessions).")
     async def resume_session(self, interaction: discord.Interaction):
-        """Resume an existing tutoring session."""
+        """Resume an existing tutoring session (both active and ended sessions)."""
         user = interaction.user
         user_id = str(user.id)
 
         try:
-            # Check if user has an active session in database
+            # Check if user has an active session first
             existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
-            if not existing_session:
-                await interaction.response.send_message(
-                    f"❌ {user.mention}, you don't have an active session to resume. Use `/start_session` to begin a new one!", 
-                    ephemeral=True
-                )
-                return
 
-            # Check if session is already in memory
-            if user.id in self.sessions:
-                session = self.sessions[user.id]
-                await interaction.response.send_message(
-                    f"✅ {user.mention}, your session is already active! Continue chatting in {session['thread'].mention}.", 
-                    ephemeral=True
+            # If no active session, check for any previous session (including ended ones)
+            if not existing_session:
+                # Look for the most recent session (active or ended)
+                recent_session = db.sessions_collection.find_one(
+                    {"user_id": user_id}, 
+                    sort=[("start_time", -1)]
                 )
-                return
+
+                if not recent_session:
+                    await interaction.response.send_message(
+                        f"❌ {user.mention}, you don't have any previous sessions to resume. Use `/start_session` to begin a new one!", 
+                        ephemeral=True
+                    )
+                    return
+
+                # Reactivate the session if it was ended
+                if not recent_session.get("active", False):
+                    db.sessions_collection.update_one(
+                        {"user_id": user_id, "_id": recent_session["_id"]},
+                        {"$set": {
+                            "active": True,
+                            "last_activity": datetime.datetime.utcnow(),
+                            "dm_warning_sent": False,
+                            "thread_reminder_sent": False
+                        }}
+                    )
+                    existing_session = recent_session
 
             # Try to find the existing thread
             thread_found = False
-            server_name = interaction.guild.name if interaction.guild else "DM"
-            thread_name = f"Schrödy-{server_name}"
+            user_display_name = self.get_user_display_name(user, interaction.guild)
+            thread_name = f"Schrödy-{user_display_name}"
 
             # If we're already in the correct thread, just resume here
             if isinstance(interaction.channel, discord.Thread) and interaction.channel.name == thread_name:
                 # Check if user is a member of this thread
                 if any(member.id == user.id for member in interaction.channel.members):
-                    self.sessions[user.id] = {
-                        'thread': interaction.channel,
-                        'user': user,
-                        'start_time': datetime.datetime.utcnow()
-                    }
+                    # Create or get session using sessions.py system
+                    session = session_manager.get_session(interaction.channel.id)
+                    if not session:
+                        session = session_manager.create_session(interaction.channel)
+
+                    user_session = session.add_user(user)
 
                     # Update last activity time
                     db.sessions_collection.update_one(
@@ -213,12 +273,11 @@ class Tutor(commands.Cog):
                         {"$set": {"last_activity": datetime.datetime.utcnow()}}
                     )
 
-                    # Send response first, then the welcome message
                     await interaction.response.send_message(
                         f"✅ {user.mention}, your session has been resumed in this thread!", 
                         ephemeral=True
                     )
-                    await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                    await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
                     return
 
             # Search for the thread in the guild
@@ -227,39 +286,51 @@ class Tutor(commands.Cog):
                 # First check active threads
                 active_threads = await guild.active_threads()
                 for thread in active_threads:
-                    if thread.name == thread_name and any(member.id == user.id for member in thread.members):
-                        # Recreate session object
-                        self.sessions[user.id] = {
-                            'thread': thread,
-                            'user': user,
-                            'start_time': datetime.datetime.utcnow()
-                        }
+                    if thread.name == thread_name:
+                        # Check if user is a member or try to add them
+                        try:
+                            if not any(member.id == user.id for member in thread.members):
+                                await thread.add_user(user)
 
-                        # Update last activity time
-                        db.sessions_collection.update_one(
-                            {"user_id": user_id, "active": True}, 
-                            {"$set": {"last_activity": datetime.datetime.utcnow()}}
-                        )
+                            # Create or get session using sessions.py system
+                            session = session_manager.get_session(thread.id)
+                            if not session:
+                                session = session_manager.create_session(thread)
 
-                        await interaction.response.send_message(
-                            f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
-                            ephemeral=True
-                        )
-                        await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
-                        thread_found = True
-                        break
+                            user_session = session.add_user(user)
+
+                            # Update last activity time
+                            db.sessions_collection.update_one(
+                                {"user_id": user_id, "active": True}, 
+                                {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                            )
+
+                            await interaction.response.send_message(
+                                f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
+                                ephemeral=True
+                            )
+                            await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+                            thread_found = True
+                            break
+                        except discord.Forbidden:
+                            continue
 
                 # If not found in active threads, check archived threads
                 if not thread_found:
-                    async for thread in guild.archived_threads(limit=50):
-                        if thread.name == thread_name and any(member.id == user.id for member in thread.members):
-                            # Unarchive the thread by sending a message
+                    async for thread in guild.archived_threads(limit=100):
+                        if thread.name == thread_name:
                             try:
-                                self.sessions[user.id] = {
-                                    'thread': thread,
-                                    'user': user,
-                                    'start_time': datetime.datetime.utcnow()
-                                }
+                                # Try to unarchive and add user
+                                await thread.edit(archived=False)
+                                if not any(member.id == user.id for member in thread.members):
+                                    await thread.add_user(user)
+
+                                # Create or get session using sessions.py system
+                                session = session_manager.get_session(thread.id)
+                                if not session:
+                                    session = session_manager.create_session(thread)
+
+                                user_session = session.add_user(user)
 
                                 # Update last activity time
                                 db.sessions_collection.update_one(
@@ -271,18 +342,41 @@ class Tutor(commands.Cog):
                                     f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
                                     ephemeral=True
                                 )
-                                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.")
+                                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed from archive. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
                                 thread_found = True
                                 break
                             except discord.Forbidden:
-                                # Can't access archived thread
+                                continue
+                            except Exception as e:
+                                print(f"Error unarchiving thread: {e}")
                                 continue
 
             if not thread_found:
+                # Create a new thread since the old one wasn't found
+                user_display_name = self.get_user_display_name(user, interaction.guild)
+
+                # Check if we're in a thread, if so, get the parent channel
+                if isinstance(interaction.channel, discord.Thread):
+                    parent_channel = interaction.channel.parent
+                    thread = await parent_channel.create_thread(name=f"Schrödy-{user_display_name}", type=discord.ChannelType.public_thread)
+                else:
+                    thread = await interaction.channel.create_thread(name=f"Schrödy-{user_display_name}", type=discord.ChannelType.public_thread)
+
+                # Create session using sessions.py system
+                session = session_manager.create_session(thread)
+                user_session = session.add_user(user)
+
+                # Update last activity time
+                db.sessions_collection.update_one(
+                    {"user_id": user_id, "active": True}, 
+                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                )
+
                 await interaction.response.send_message(
-                    f"❌ {user.mention}, couldn't find your previous thread. Use `/start_session` to begin a new session!", 
+                    f"✅ {user.mention}, your session has been resumed in a new thread since the previous one wasn't found!", 
                     ephemeral=True
                 )
+                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed in a new thread. Your conversation history has been preserved. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
 
         except Exception as e:
             print(f"Error in resume_session: {e}")
@@ -291,19 +385,26 @@ class Tutor(commands.Cog):
                     f"❌ {user.mention}, an error occurred while resuming your session. Please try again or start a new session.", 
                     ephemeral=True
                 )
-            else:
-                await interaction.followup.send(
-                    f"❌ {user.mention}, an error occurred while resuming your session. Please try again or start a new session.", 
-                    ephemeral=True
-                )
 
     @app_commands.command(name="end_session", description="End the tutoring session.")
     async def end_session(self, interaction: discord.Interaction):
         """Ends a tutoring session and asks for feedback."""
-        session = self.sessions.get(interaction.user.id)
-        if session:
-            await session['thread'].send(f"✅ {interaction.user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")
-            del self.sessions[interaction.user.id]
+        if isinstance(interaction.channel, discord.Thread):
+            session = session_manager.get_session(interaction.channel.id)
+            if session:
+                user_session = session.get_user_session(interaction.user.id)
+                if user_session:
+                    await session.end_user_session(interaction.user)
+                    session_manager.end_session(interaction.channel.id)
+                else:
+                    await interaction.response.send_message("❌ You don't have an active session in this thread.", ephemeral=True)
+                    return
+            else:
+                await interaction.response.send_message("❌ No active session found in this thread.", ephemeral=True)
+                return
+        else:
+            await interaction.response.send_message("❌ This command must be used in a tutoring thread.", ephemeral=True)
+            return
 
         db.end_session(interaction.user.id)
         await interaction.response.send_message(f"📌 Your session has ended, {interaction.user.mention}. Please rate your experience with `/feedback <1-5>`.")
@@ -316,101 +417,41 @@ class Tutor(commands.Cog):
             return
 
         # Check if message is in a tutoring thread
-        session = self.sessions.get(message.author.id)
-        if session and message.channel == session['thread']:
-            user_id = str(message.author.id)
+        if not (isinstance(message.channel, discord.Thread) and message.channel.name.startswith("Schrödy-")):
+            return
 
-            # Check if user has an active session
-            existing_session = db.sessions_collection.find_one({"user_id": user_id, "active": True})
-            if not existing_session:
-                embed = discord.Embed(
-                    title="❌ Session Expired",
-                    description=f"{message.author.mention}, your tutoring session has expired or ended.",
-                    color=discord.Color.orange()
-                )
-                embed.add_field(
-                    name="💡 What you can do:",
-                    value="1️⃣ **Try resuming:** Use `/resume_session` to reconnect to your previous session\n2️⃣ **Start fresh:** Use `/start_session` to begin a new conversation",
-                    inline=False
-                )
-                await message.channel.send(embed=embed)
-                return
+        # Show thinking indicator with user identification
+        user_display_name = self.get_user_display_name(message.author, message.guild)
+        thinking_message = await message.channel.send(f"🤔 Schrödy is thinking... (responding to {user_display_name})")
 
-            # Show thinking indicator
-            thinking_message = await message.channel.send("🤔 Schrödy is thinking...")
+        try:
+            # Get or create session using sessions.py system
+            session = session_manager.get_session(message.channel.id)
+            if not session:
+                # This might be an old thread, create a new session
+                session = session_manager.create_session(message.channel)
 
-            # Get conversation history
-            history = db.get_conversation(user_id)
+            # Add user to session if not already added
+            session.add_user(message.author)
 
-            # Build conversation context
-            conversation_context = ""
-            for msg in history:
-                role = "User" if msg["role"] == "user" else "Schrödy"
-                conversation_context += f"{role}: {msg['message']}\n"
-
-            # Create contextualized prompt
-            if conversation_context:
-                contextualized_question = f"Previous conversation:\n{conversation_context}\nUser: {message.content}"
-            else:
-                contextualized_question = message.content
-
-            # Update last activity time and reset reminder flags
-            db.sessions_collection.update_one(
-                {"user_id": user_id, "active": True},
-                {
-                    "$set": {
-                        "last_activity": datetime.datetime.utcnow(),
-                        "thread_reminder_sent": False,
-                        "dm_warning_sent": False
-                    }
-                }
-            )
-
-            # Save the user's question
-            db.add_message(user_id, message.content, role="user")
-
-            # Get response from LearnLM with context
-            response = ask_learnlm(contextualized_question)
-
-            # Save AI response
-            db.add_message(user_id, response, role="ai")
+            # Let the session system handle the message
+            await session.process_message(message)
 
             # Delete the thinking message
             await thinking_message.delete()
-
-            # Split long messages into chunks to avoid Discord's 2000 character limit
-            MAX_LENGTH = 2000
-            if len(response) <= MAX_LENGTH:
-                await message.channel.send(response)
-            else:
-                # Split the message into chunks
-                chunks = []
-                current_chunk = ""
-
-                for line in response.split('\n'):
-                    if len(current_chunk) + len(line) + 1 <= MAX_LENGTH:
-                        current_chunk += line + '\n'
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk.rstrip())
-                        current_chunk = line + '\n'
-
-                if current_chunk:
-                    chunks.append(current_chunk.rstrip())
-
-                # Send each chunk
-                for i, chunk in enumerate(chunks):
-                    if i == 0:
-                        await message.channel.send(chunk)
-                    else:
-                        await message.channel.send(f"**(continued...)**\n{chunk}")
+        except Exception as e:
+            await thinking_message.delete()
+            print(f"Error in on_message: {e}")
 
     @tasks.loop(minutes=5)
     async def check_inactive_sessions(self):
         """Check for inactive sessions and send reminders/close as needed."""
         try:
-            now = datetime.datetime.utcnow()
+            # Clean up inactive sessions across all session managers
+            session_manager.cleanup_inactive_sessions()
 
+            # Your existing database cleanup logic here
+            now = datetime.datetime.utcnow()
             for session in db.sessions_collection.find({"active": True}):
                 try:
                     time_since_activity = now - session.get("last_activity", session["start_time"])
@@ -419,17 +460,11 @@ class Tutor(commands.Cog):
                     # 30 minutes - close session
                     if time_since_activity > datetime.timedelta(minutes=30):
                         db.end_session(user_id)
-
                         try:
                             user = await self.bot.fetch_user(int(user_id))
                             await user.send("⏳ Your tutoring session has ended due to inactivity. Please provide feedback with `/feedback <1-5>`.")
                         except (discord.NotFound, discord.Forbidden):
-                            # User not found or DMs disabled
                             pass
-
-                        # Clean up session from memory
-                        if int(user_id) in self.sessions:
-                            del self.sessions[int(user_id)]
 
                     # 15 minutes - send DM warning
                     elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
@@ -446,47 +481,43 @@ class Tutor(commands.Cog):
                                 inline=False
                             )
                             await user.send(embed=embed)
-
-                            # Mark DM warning as sent
                             db.sessions_collection.update_one(
                                 {"user_id": user_id, "active": True},
                                 {"$set": {"dm_warning_sent": True}}
                             )
                         except (discord.NotFound, discord.Forbidden):
-                            # User not found or DMs disabled
                             pass
 
-                    # 5 minutes - send thread reminder with interaction
+                    # 5 minutes - send thread reminder
                     elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
-                        # Find the user's session thread
-                        user_session = self.sessions.get(int(user_id))
-                        if user_session and user_session['thread']:
-                            try:
-                                embed = discord.Embed(
-                                    title="💤 Are you still there?",
-                                    description=f"<@{user_id}>, you've been inactive for 5 minutes.",
-                                    color=discord.Color.yellow()
-                                )
-                                embed.add_field(
-                                    name="⏰ Session will close in:",
-                                    value="25 minutes if no activity is detected",
-                                    inline=False
-                                )
-                                embed.add_field(
-                                    name="💬 To continue:",
-                                    value="Just send any message or question to keep your session active!",
-                                    inline=False
-                                )
-                                await user_session['thread'].send(embed=embed)
-
-                                # Mark thread reminder as sent
-                                db.sessions_collection.update_one(
-                                    {"user_id": user_id, "active": True},
-                                    {"$set": {"thread_reminder_sent": True}}
-                                )
-                            except discord.NotFound:
-                                # Thread might have been deleted
-                                pass
+                        # Find the thread through session manager
+                        for thread_id, tutoring_session in session_manager.sessions.items():
+                            user_session = tutoring_session.get_user_session(int(user_id))
+                            if user_session:
+                                try:
+                                    embed = discord.Embed(
+                                        title="💤 Are you still there?",
+                                        description=f"<@{user_id}>, you've been inactive for 5 minutes.",
+                                        color=discord.Color.yellow()
+                                    )
+                                    embed.add_field(
+                                        name="⏰ Session will close in:",
+                                        value="25 minutes if no activity is detected",
+                                        inline=False
+                                    )
+                                    embed.add_field(
+                                        name="💬 To continue:",
+                                        value="Just send any message or question to keep your session active!",
+                                        inline=False
+                                    )
+                                    await tutoring_session.thread.send(embed=embed)
+                                    db.sessions_collection.update_one(
+                                        {"user_id": user_id, "active": True},
+                                        {"$set": {"thread_reminder_sent": True}}
+                                    )
+                                    break
+                                except discord.NotFound:
+                                    pass
 
                 except Exception as e:
                     print(f"Error processing session for user {session.get('user_id', 'unknown')}: {e}")
