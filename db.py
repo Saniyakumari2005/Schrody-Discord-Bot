@@ -44,7 +44,7 @@ def get_messages(user_id, limit=10):
     """Retrieve the last N messages from a user."""
     return list(messages_collection.find({"user_id": str(user_id)}).sort("_id", -1).limit(limit))
 
-def start_session(user_id, username):
+def start_session(user_id, username, thread_id=None):
     """Starts a new tutoring session for a user."""
     now = datetime.datetime.utcnow()
     session_data = {
@@ -54,14 +54,46 @@ def start_session(user_id, username):
         "last_activity": now,
         "active": True,
         "thread_reminder_sent": False,
-        "dm_warning_sent": False
+        "dm_warning_sent": False,
+        "thread_id": str(thread_id) if thread_id else None,
+        "feedback_given": False,
     }
     sessions_collection.insert_one(session_data)
-    print(f"✅ Started session for {username} (ID: {user_id})")
+    print(f"✅ Started session for {username} (ID: {user_id}) in thread {thread_id}")
 
-def end_session(user_id):
+def end_session(user_id, thread_id=None):
     """End a tutoring session."""
-    sessions_collection.update_one({"user_id": str(user_id), "active": True}, {"$set": {"active": False}})
+    if thread_id:
+        sessions_collection.update_one(
+            {"user_id": str(user_id), "thread_id": str(thread_id), "active": True}, 
+            {"$set": {"active": False, "end_time": datetime.datetime.utcnow()}}
+        )
+    else:
+        sessions_collection.update_one(
+            {"user_id": str(user_id), "active": True}, 
+            {"$set": {"active": False, "end_time": datetime.datetime.utcnow()}}
+        )
+def get_active_session(user_id, thread_id=None):
+    """Get active session for a user, optionally filtered by thread."""
+    query = {"user_id": str(user_id), "active": True}
+    if thread_id:
+        query["thread_id"] = str(thread_id)
+    return sessions_collection.find_one(query)
+
+def get_session_by_thread(thread_id):
+    """Get all active sessions in a specific thread."""
+    return list(sessions_collection.find({"thread_id": str(thread_id), "active": True}))
+
+def update_session_activity(user_id, thread_id=None):
+    """Update the last activity time for a session."""
+    query = {"user_id": str(user_id), "active": True}
+    if thread_id:
+        query["thread_id"] = str(thread_id)
+    
+    sessions_collection.update_one(
+        query,
+        {"$set": {"last_activity": datetime.datetime.utcnow()}}
+    )
 
 def log_feedback(user_id, rating):
     """Store feedback rating."""
