@@ -125,7 +125,7 @@ class TutoringSession:
         if user.id in self.user_sessions:
             user_session = self.user_sessions[user.id]
             user_session.active = False
-            db.end_user_session(user.id, self.thread.id)
+            db.end_session(user.id, self.thread.id)
             await self.thread.send(f"✅ {user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")
             
             # Remove user from active sessions
@@ -140,7 +140,7 @@ class TutoringSession:
         # End all user sessions
         for user_id, user_session in self.user_sessions.items():
             user_session.active = False
-            db.end_user_session(user_id, self.thread.id)
+            db.end_session(user_id, self.thread.id)
         
         # Notify all users
         user_mentions = [f"<@{user_id}>" for user_id in self.user_sessions.keys()]
