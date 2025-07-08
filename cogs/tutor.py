@@ -72,8 +72,31 @@ class Tutor(commands.Cog):
         session = session_manager.create_session(thread)
         user_session = session.add_user(user)
 
-        db.start_session(interaction.user.id, interaction.user.name)
-        await thread.send(f"📚 {user.mention}, Schrödy is here to assist you! Ask me anything.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+        db.start_session(interaction.user.id, interaction.user.name, thread.id)
+
+        # Create styled embed for session start
+        embed = discord.Embed(
+            title="📚 Tutoring Session Started",
+            description=f"{user.mention}, Schrödy is here to assist you! Ask me anything.",
+            color=discord.Color.green()
+        )
+        embed.add_field(
+            name="🎯 Your Learning Environment:",
+            value="This is your personalized tutoring space with Schrödy",
+            inline=False
+        )
+        embed.add_field(
+            name="👥 Multiuser Session:",
+            value="Other users can join and participate as guests to learn together!",
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Pro Tip:",
+            value="Ask questions naturally - I'm here to help you understand concepts step by step!",
+            inline=False
+        )
+
+        await thread.send(embed=embed)
         await interaction.response.send_message(f"📚 Tutoring session started, {interaction.user.mention}! I'll assist you in the thread I created.")
 
     @app_commands.command(name="ask", description="Ask Schrody a question.")
@@ -277,7 +300,25 @@ class Tutor(commands.Cog):
                         f"✅ {user.mention}, your session has been resumed in this thread!", 
                         ephemeral=True
                     )
-                    await interaction.channel.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+
+                    # Create styled embed for session resume
+                    embed = discord.Embed(
+                        title="🔄 Session Resumed",
+                        description=f"{user.mention}, welcome back! Your session has been resumed.",
+                        color=discord.Color.blue()
+                    )
+                    embed.add_field(
+                        name="💬 Ready to Continue:",
+                        value="Your conversation history is preserved - continue asking your questions!",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="👥 Multiuser Session:",
+                        value="Other users can join and participate as guests to learn together!",
+                        inline=False
+                    )
+
+                    await interaction.channel.send(embed=embed)
                     return
 
             # Search for the thread in the guild
@@ -309,7 +350,25 @@ class Tutor(commands.Cog):
                                 f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
                                 ephemeral=True
                             )
-                            await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+
+                            # Create styled embed for session resume
+                            embed = discord.Embed(
+                                title="🔄 Session Resumed",
+                                description=f"{user.mention}, welcome back! Your session has been resumed.",
+                                color=discord.Color.blue()
+                            )
+                            embed.add_field(
+                                name="💬 Ready to Continue:",
+                                value="Your conversation history is preserved - continue asking your questions!",
+                                inline=False
+                            )
+                            embed.add_field(
+                                name="👥 Multiuser Session:",
+                                value="Other users can join and participate as guests to learn together!",
+                                inline=False
+                            )
+
+                            await thread.send(embed=embed)
                             thread_found = True
                             break
                         except discord.Forbidden:
@@ -342,7 +401,25 @@ class Tutor(commands.Cog):
                                     f"✅ {user.mention}, your session has been resumed in {thread.mention}!", 
                                     ephemeral=True
                                 )
-                                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed from archive. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+
+                                # Create styled embed for session resume from archive
+                                embed = discord.Embed(
+                                    title="🔄 Session Resumed",
+                                    description=f"{user.mention}, welcome back! Your session has been resumed from archive.",
+                                    color=discord.Color.blue()
+                                )
+                                embed.add_field(
+                                    name="💬 Ready to Continue:",
+                                    value="Your conversation history is preserved - continue asking your questions!",
+                                    inline=False
+                                )
+                                embed.add_field(
+                                    name="👥 Multiuser Session:",
+                                    value="Other users can join and participate as guests to learn together!",
+                                    inline=False
+                                )
+
+                                await thread.send(embed=embed)
                                 thread_found = True
                                 break
                             except discord.Forbidden:
@@ -376,7 +453,30 @@ class Tutor(commands.Cog):
                     f"✅ {user.mention}, your session has been resumed in a new thread since the previous one wasn't found!", 
                     ephemeral=True
                 )
-                await thread.send(f"🔄 {user.mention}, welcome back! Your session has been resumed in a new thread. Your conversation history has been preserved. Continue asking your questions.\n\n💡 **Note:** This is a multiuser session! Other users can join and participate as guests.")
+
+                # Create styled embed for session resume in new thread
+                embed = discord.Embed(
+                    title="🔄 Session Resumed",
+                    description=f"{user.mention}, welcome back! Your session has been resumed in a new thread.",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(
+                    name="💾 History Preserved:",
+                    value="Your conversation history has been preserved - continue asking your questions!",
+                    inline=False
+                )
+                embed.add_field(
+                    name="👥 Multiuser Session:",
+                    value="Other users can join and participate as guests to learn together!",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🆕 New Thread:",
+                    value="A new thread was created since the previous one wasn't found.",
+                    inline=False
+                )
+
+                await thread.send(embed=embed)
 
         except Exception as e:
             print(f"Error in resume_session: {e}")
@@ -394,20 +494,38 @@ class Tutor(commands.Cog):
             if session:
                 user_session = session.get_user_session(interaction.user.id)
                 if user_session:
+                    # End the user's individual session
                     await session.end_user_session(interaction.user)
-                    session_manager.end_session(interaction.channel.id)
-                else:
-                    await interaction.response.send_message("❌ You don't have an active session in this thread.", ephemeral=True)
-                    return
-            else:
-                await interaction.response.send_message("❌ No active session found in this thread.", ephemeral=True)
-                return
-        else:
-            await interaction.response.send_message("❌ This command must be used in a tutoring thread.", ephemeral=True)
-            return
 
-        db.end_session(interaction.user.id)
-        await interaction.response.send_message(f"📌 Your session has ended, {interaction.user.mention}. Please rate your experience with `/feedback <1-5>`.")
+                    # Update database with thread_id
+                    db.end_session(interaction.user.id, interaction.channel.id)
+
+                    # Send interaction response (since end_user_session already sent a message to the thread)
+                    await interaction.response.send_message(
+                        f"✅ Your individual session has ended, {interaction.user.mention}. "
+                        f"Please rate your experience with `/feedback <1-5>`.", 
+                        ephemeral=True
+                    )
+
+                    # Only remove the entire session if no other users are active
+                    if len(session.get_active_users()) == 0:
+                        session_manager.end_session(interaction.channel.id)
+
+                else:
+                    await interaction.response.send_message(
+                        "❌ You don't have an active session in this thread.", 
+                        ephemeral=True
+                    )
+            else:
+                await interaction.response.send_message(
+                    "❌ No active session found in this thread.", 
+                    ephemeral=True
+                )
+        else:
+            await interaction.response.send_message(
+                "❌ This command must be used in a tutoring thread.", 
+                ephemeral=True
+            )
 
     @commands.Cog.listener()
     async def on_message(self, message):
