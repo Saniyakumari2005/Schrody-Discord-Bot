@@ -160,6 +160,16 @@ class Tutor(commands.Cog):
     async def _handle_active_user_question(self, interaction, question, user_id, user_int_id, session, thinking_message):
         """Handle question from user with active session using sessions.py system."""
         try:
+            # Update last activity time in database and reset warning flags
+            db.sessions_collection.update_one(
+                {"user_id": user_id, "active": True},
+                {"$set": {
+                    "last_activity": datetime.datetime.utcnow(),
+                    "dm_warning_sent": False,
+                    "thread_reminder_sent": False
+                }}
+            )
+
             # Process the message through the session system
             # Create a mock message object for the session system
             class MockMessage:
@@ -290,10 +300,14 @@ class Tutor(commands.Cog):
 
                     user_session = session.add_user(user)
 
-                    # Update last activity time
+                    # Update last activity time and reset warning flags
                     db.sessions_collection.update_one(
                         {"user_id": user_id, "active": True}, 
-                        {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                        {"$set": {
+                            "last_activity": datetime.datetime.utcnow(),
+                            "dm_warning_sent": False,
+                            "thread_reminder_sent": False
+                        }}
                     )
 
                     await interaction.response.send_message(
@@ -340,10 +354,14 @@ class Tutor(commands.Cog):
 
                             user_session = session.add_user(user)
 
-                            # Update last activity time
+                            # Update last activity time and reset warning flags
                             db.sessions_collection.update_one(
                                 {"user_id": user_id, "active": True}, 
-                                {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                                {"$set": {
+                                    "last_activity": datetime.datetime.utcnow(),
+                                    "dm_warning_sent": False,
+                                    "thread_reminder_sent": False
+                                }}
                             )
 
                             await interaction.response.send_message(
@@ -391,10 +409,14 @@ class Tutor(commands.Cog):
 
                                 user_session = session.add_user(user)
 
-                                # Update last activity time
+                                # Update last activity time and reset warning flags
                                 db.sessions_collection.update_one(
                                     {"user_id": user_id, "active": True}, 
-                                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                                    {"$set": {
+                                        "last_activity": datetime.datetime.utcnow(),
+                                        "dm_warning_sent": False,
+                                        "thread_reminder_sent": False
+                                    }}
                                 )
 
                                 await interaction.response.send_message(
@@ -443,10 +465,14 @@ class Tutor(commands.Cog):
                 session = session_manager.create_session(thread)
                 user_session = session.add_user(user)
 
-                # Update last activity time
+                # Update last activity time and reset warning flags
                 db.sessions_collection.update_one(
                     {"user_id": user_id, "active": True}, 
-                    {"$set": {"last_activity": datetime.datetime.utcnow()}}
+                    {"$set": {
+                        "last_activity": datetime.datetime.utcnow(),
+                        "dm_warning_sent": False,
+                        "thread_reminder_sent": False
+                    }}
                 )
 
                 await interaction.response.send_message(
@@ -494,18 +520,35 @@ class Tutor(commands.Cog):
             if session:
                 user_session = session.get_user_session(interaction.user.id)
                 if user_session:
+                    await interaction.response.send_message("Session ended successfully.", ephemeral=True)
                     # End the user's individual session
                     await session.end_user_session(interaction.user)
 
                     # Update database with thread_id
                     db.end_session(interaction.user.id, interaction.channel.id)
 
-                    # Send interaction response (since end_user_session already sent a message to the thread)
-                    await interaction.response.send_message(
-                        f"✅ Your individual session has ended, {interaction.user.mention}. "
-                        f"Please rate your experience with `/feedback <1-5>`.", 
-                        ephemeral=True
+                    # Create styled embed for session end
+                    embed = discord.Embed(
+                        title="📚 Session Ended",
+                        description=f"{interaction.user.mention}, your tutoring session has ended successfully.",
+                        color=discord.Color.red()
                     )
+                    embed.add_field(
+                        name="💬 Feedback Request:",
+                        value="Please rate your experience with `/feedback <1-5>` to help us improve!",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="📈 Session Summary:",
+                        value="Your individual session has been completed and saved for future reference.",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="🔄 Next Time:",
+                        value="Use `/start_session` to begin a new session or `/resume_session` to continue where you left off.",
+                        inline=False
+                    )
+                    await interaction.channel.send(embed=embed)                   
 
                     # Only remove the entire session if no other users are active
                     if len(session.get_active_users()) == 0:
@@ -537,6 +580,17 @@ class Tutor(commands.Cog):
         # Check if message is in a tutoring thread
         if not (isinstance(message.channel, discord.Thread) and message.channel.name.startswith("Schrödy-")):
             return
+
+        # Update last activity time for any active session in this thread and reset warning flags
+        user_id = str(message.author.id)
+        db.sessions_collection.update_one(
+            {"user_id": user_id, "active": True},
+            {"$set": {
+                "last_activity": datetime.datetime.utcnow(),
+                "dm_warning_sent": False,
+                "thread_reminder_sent": False
+            }}
+        )
 
         # Show thinking indicator with user identification
         user_display_name = self.get_user_display_name(message.author, message.guild)
@@ -576,7 +630,7 @@ class Tutor(commands.Cog):
                     user_id = session["user_id"]
 
                     # 30 minutes - close session
-                    if time_since_activity > datetime.timedelta(minutes=30):
+                    if time_since_activity >= datetime.timedelta(minutes=30):
                         db.end_session(user_id)
                         try:
                             user = await self.bot.fetch_user(int(user_id))
@@ -584,8 +638,8 @@ class Tutor(commands.Cog):
                         except (discord.NotFound, discord.Forbidden):
                             pass
 
-                    # 15 minutes - send DM warning
-                    elif time_since_activity > datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
+                    # 15 minutes - send DM warning (only if not already sent)
+                    elif time_since_activity >= datetime.timedelta(minutes=15) and not session.get("dm_warning_sent", False):
                         try:
                             user = await self.bot.fetch_user(int(user_id))
                             embed = discord.Embed(
@@ -606,8 +660,8 @@ class Tutor(commands.Cog):
                         except (discord.NotFound, discord.Forbidden):
                             pass
 
-                    # 5 minutes - send thread reminder
-                    elif time_since_activity > datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
+                    # 5 minutes - send thread reminder (only if not already sent)
+                    elif time_since_activity >= datetime.timedelta(minutes=5) and not session.get("thread_reminder_sent", False):
                         # Find the thread through session manager
                         for thread_id, tutoring_session in session_manager.sessions.items():
                             user_session = tutoring_session.get_user_session(int(user_id))
