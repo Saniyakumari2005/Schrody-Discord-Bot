@@ -126,7 +126,6 @@ class TutoringSession:
             user_session = self.user_sessions[user.id]
             user_session.active = False
             db.end_session(user.id, self.thread.id)
-            await self.thread.send(f"✅ {user.mention}, your tutoring session has ended. Please provide feedback with `/feedback <1-5>`.")
             
             # Remove user from active sessions
             del self.user_sessions[user.id]
