@@ -24,6 +24,22 @@ class Tutor(commands.Cog):
     @app_commands.command(name="start_session", description="Start a tutoring session.")
     async def start_session(self, interaction: discord.Interaction):
         """Starts a tutoring session and logs the start time."""
+        # Check if the command is being used in a DM
+        if isinstance(interaction.channel, discord.DMChannel):
+            await interaction.response.send_message(
+                "❌ This command cannot be used in DMs. Please use it in a server channel where I can create threads.",
+                ephemeral=True
+            )
+            return
+
+        # Check if the channel supports threads
+        if not hasattr(interaction.channel, 'create_thread'):
+            await interaction.response.send_message(
+                "❌ This command can only be used in channels that support threads (text channels).",
+                ephemeral=True
+            )
+            return
+            
         user = interaction.user
         existing_session = db.sessions_collection.find_one({"user_id": str(user.id), "active": True})
 
