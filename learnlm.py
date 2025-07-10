@@ -1,7 +1,7 @@
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
-from typing import Optional
+from typing import Optional, List, Dict
 
 # Load API keys
 load_dotenv()
@@ -57,75 +57,25 @@ TUTOR_SYSTEM_PROMPT = """You are Schrödy, a friendly and supportive tutor with 
 
 Remember and reference previous parts of the conversation when relevant."""
 
-def list_models():
-    """List all available Gemini models."""
-    try:
-        models = genai.list_models()
-        model_list = []
-        for model in models:
-            model_list.append(f"• **{model.name}** - {model.description}")
-        return "\n".join(model_list) if model_list else "No models available"
-    except Exception as e:
-        return f"❌ Error listing models: {str(e)}"
+class LearnLMTutor:
+    """A streamlined tutor interface with unified search handling."""
 
-def ask_learnlm(prompt: str, search_enabled: bool = False) -> str:
-    """Send a user query to Gemini API and return the response with optional grounding."""
-    try:
-        # Configure tools based on search_enabled flag
-        tools = []
-        if search_enabled:
-            # Configure grounding with Google Search
-            grounding_config = {
-                "google_search_retrieval": {
-                    "dynamic_retrieval_config": {
-                        "mode": "MODE_DYNAMIC",
-                        "dynamic_threshold": 0.7
-                    }
-                }
+    # Class-level search configuration - shared across all instances
+    SEARCH_CONFIG = {
+        "google_search_retrieval": {
+            "dynamic_retrieval_config": {
+                "mode": "MODE_DYNAMIC",
+                "dynamic_threshold": 0.7
             }
-            tools.append(grounding_config)
+        }
+    }
 
-        # Initialize the model
-        model = genai.GenerativeModel('gemini-2.5-flash')
-
-        # Create the full prompt with system instructions and user input
-        full_prompt = f"{TUTOR_SYSTEM_PROMPT}\n\nStudent: {prompt}\n\nTutor:"
-
-        # Generate response with or without grounding
-        if tools:
-            response = model.generate_content(full_prompt, tools=tools)
-        else:
-            response = model.generate_content(full_prompt)
-
-        if response and response.text:
-            return response.text
-        else:
-            return "❌ I received an empty response. Please try rephrasing your question."
-
-    except Exception as e:
-        print(f"Error with Gemini API: {e}")
-        return f"❌ Sorry, I encountered an error while processing your request: {str(e)} Please try again."
-
-def ask_learnlm_with_search(prompt: str) -> str:
-    """Wrapper function that explicitly enables search using Gemini grounding."""
-    return ask_learnlm(prompt, search_enabled=True)
-
-def ask_learnlm_auto_search(prompt: str) -> str:
-    """Automatically determine if search is needed based on prompt content."""
     # Keywords that suggest current information is needed
-    search_keywords = [
+    SEARCH_KEYWORDS = [
         "current", "recent", "latest", "today", "now", "2024", "2025", 
         "news", "update", "updated", "development", "breakthrough", 
         "trending", "this year", "this month", "recently", "web", "search", "look up"
     ]
-
-    # Check if any search keywords are present
-    should_search = any(keyword in prompt.lower() for keyword in search_keywords)
-
-    return ask_learnlm(prompt, search_enabled=should_search)
-
-class LearnLMTutor:
-    """A class-based interface for the LearnLM tutor with grounding capabilities."""
 
     def __init__(self, model_name: str = 'gemini-2.5-flash'):
         """Initialize the tutor with a specific model."""
@@ -133,34 +83,43 @@ class LearnLMTutor:
         self.model = genai.GenerativeModel(model_name)
         self.conversation_history = []
 
-        # Grounding configuration
-        self.grounding_config = {
-            "google_search_retrieval": {
-                "dynamic_retrieval_config": {
-                    "mode": "MODE_DYNAMIC",
-                    "dynamic_threshold": 0.7
-                }
-            }
-        }
+    def _should_search(self, prompt: str) -> bool:
+        """Determine if search should be enabled based on prompt content."""
+        return any(keyword in prompt.lower() for keyword in self.SEARCH_KEYWORDS)
 
-    def ask(self, prompt: str, use_search: bool = False, remember_context: bool = True) -> str:
-        """Ask a question to the tutor with optional search and context memory."""
+    def _build_context(self, max_history: int = 3) -> str:
+        """Build conversation context from history."""
+        if not self.conversation_history:
+            return ""
+
+        context = "Previous conversation context:\n"
+        for entry in self.conversation_history[-max_history:]:
+            context += f"Student: {entry['question']}\nTutor: {entry['answer']}\n\n"
+        return context
+
+    def ask(self, prompt: str, use_search: Optional[bool] = None, remember_context: bool = True) -> str:
+        """
+        Ask a question to the tutor.
+
+        Args:
+            prompt: The student's question
+            use_search: Force search on/off. If None, auto-determines based on content
+            remember_context: Whether to remember this exchange in conversation history
+        """
         try:
+            # Auto-determine search if not specified
+            if use_search is None:
+                use_search = self._should_search(prompt)
+
             # Build context from conversation history
-            context = ""
-            if remember_context and self.conversation_history:
-                context = "Previous conversation context:\n"
-                for entry in self.conversation_history[-3:]:  # Keep last 3 exchanges
-                    context += f"Student: {entry['question']}\nTutor: {entry['answer']}\n\n"
+            context = self._build_context() if remember_context else ""
 
             # Build full prompt
             full_prompt = f"{TUTOR_SYSTEM_PROMPT}\n\n{context}Student: {prompt}\n\nTutor:"
 
             # Generate response with or without grounding
-            if use_search:
-                response = self.model.generate_content(full_prompt, tools=[self.grounding_config])
-            else:
-                response = self.model.generate_content(full_prompt)
+            tools = [self.SEARCH_CONFIG] if use_search else []
+            response = self.model.generate_content(full_prompt, tools=tools)
 
             if response and response.text:
                 answer = response.text
@@ -169,7 +128,8 @@ class LearnLMTutor:
                 if remember_context:
                     self.conversation_history.append({
                         'question': prompt,
-                        'answer': answer
+                        'answer': answer,
+                        'used_search': use_search
                     })
 
                 return answer
@@ -181,18 +141,49 @@ class LearnLMTutor:
             return f"❌ Sorry, I encountered an error while processing your request: {str(e)} Please try again."
 
     def ask_with_search(self, prompt: str) -> str:
-        """Ask a question with search enabled."""
+        """Ask a question with search explicitly enabled."""
         return self.ask(prompt, use_search=True)
+
+    def ask_without_search(self, prompt: str) -> str:
+        """Ask a question with search explicitly disabled."""
+        return self.ask(prompt, use_search=False)
 
     def clear_history(self):
         """Clear the conversation history."""
         self.conversation_history = []
 
-    def get_history(self) -> list:
+    def get_history(self) -> List[Dict]:
         """Get the conversation history."""
         return self.conversation_history.copy()
 
-# Example usage functions
+    def list_models(self) -> str:
+        """List all available Gemini models."""
+        try:
+            models = genai.list_models()
+            model_list = []
+            for model in models:
+                model_list.append(f"• **{model.name}** - {model.description}")
+            return "\n".join(model_list) if model_list else "No models available"
+        except Exception as e:
+            return f"❌ Error listing models: {str(e)}"
+
+# Convenience functions for backwards compatibility
+def ask_learnlm(prompt: str, search_enabled: bool = False) -> str:
+    """Legacy function wrapper for backwards compatibility."""
+    tutor = LearnLMTutor()
+    return tutor.ask(prompt, use_search=search_enabled, remember_context=False)
+
+def ask_learnlm_with_search(prompt: str) -> str:
+    """Legacy function wrapper with search enabled."""
+    tutor = LearnLMTutor()
+    return tutor.ask_with_search(prompt)
+
+def ask_learnlm_auto_search(prompt: str) -> str:
+    """Legacy function wrapper with auto search detection."""
+    tutor = LearnLMTutor()
+    return tutor.ask(prompt, remember_context=False)
+
+# Demo function
 def demo_math_formatting():
     """Demonstrate proper Unicode math formatting."""
     examples = [
@@ -211,14 +202,19 @@ if __name__ == "__main__":
     # Demo the math formatting
     demo_math_formatting()
 
-    # Example queries
+    # Example with streamlined interface
     print("\n" + "="*50)
-    print("Example with Gemini grounding:")
-    result = ask_learnlm_with_search("What are the latest developments in quantum computing in 2025?")
-    print(result)
-
-    print("\n" + "="*50)
-    print("Example with class-based interface:")
+    print("Example with streamlined interface:")
     tutor = LearnLMTutor()
-    result = tutor.ask_with_search("What are the current trends in artificial intelligence education?")
-    print(result)
+
+    # Auto-search detection
+    result = tutor.ask("What are the latest developments in quantum computing in 2025?")
+    print("Auto-search result:", result[:100] + "..." if len(result) > 100 else result)
+
+    # Explicit search control
+    result = tutor.ask_with_search("Current trends in AI education")
+    print("Explicit search result:", result[:100] + "..." if len(result) > 100 else result)
+
+    # No search
+    result = tutor.ask_without_search("Explain the quadratic formula")
+    print("No search result:", result[:100] + "..." if len(result) > 100 else result)
