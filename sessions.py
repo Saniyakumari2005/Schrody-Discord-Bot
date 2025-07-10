@@ -46,7 +46,7 @@ class TutoringSession:
         self.start_time = datetime.datetime.utcnow()
         self.active = True
         self.user_sessions: Dict[int, UserSession] = {}  # user_id -> UserSession
-        self.session_timeout = 3600  # 1 hour timeout for inactive users
+        self.session_timeout = 1800  # 30 min timeout for inactive users
     
     def add_user(self, user) -> UserSession:
         """Add a new user to the session or return existing user session."""
@@ -162,9 +162,7 @@ class TutoringSession:
             'users': [us.user.display_name for us in self.user_sessions.values()]
         }
 
-# Example usage in your bot commands:
-
-# You'll also need to modify your session management:
+# Session Management 
 class SessionManager:
     """Manages multiple tutoring sessions across different threads."""
     
@@ -206,7 +204,7 @@ class SessionManager:
 # Global session manager instance
 session_manager = SessionManager()
 
-# Example bot command handlers:
+# Bot Command Handlers 
 async def start_session_command(slash):
     """Start a new tutoring session in the current thread."""
     session = session_manager.create_session(slash.channel)
