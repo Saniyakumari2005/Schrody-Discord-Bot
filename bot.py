@@ -16,7 +16,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)  # Only console for Railway
+        logging.StreamHandler(sys.stdout)  # Only console for Railway(might delete later)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -95,15 +95,13 @@ async def on_ready():
         activity=discord.Activity(type=discord.ActivityType.watching, name="for commands")
     )
 
-# Your existing slash command
+
 @bot.tree.command(name="hello", description="Sends a greeting")
 async def hello(interaction: discord.Interaction):
     await interaction.response.send_message(f"Hello, {interaction.user.mention}! How can I help?")
 
-# Load cogs/extensions (if you have any)
 async def load_cogs():
     """Load all cogs from the cogs directory"""
-    # Your cogs are already loaded in setup_hook
     pass
 
 # Graceful shutdown handler
@@ -125,7 +123,6 @@ signal.signal(signal.SIGTERM, signal_handler)
 async def main():
     """Main function to start the bot"""
     try:
-        # Get token from environment variable
         token = os.getenv('DISCORD_TOKEN')
         if not token:
             logger.error("DISCORD_TOKEN not found in environment variables")
